@@ -240,7 +240,14 @@ const generateSmartCombos = async (req, res) => {
 
             const totalSelling = comboProducts.reduce((s, p) => s + p.selling_price, 0);
             const totalCost = comboProducts.reduce((s, p) => s + p.cost, 0);
-            const discountPct = 0.10;
+            // ─── DATA-DRIVEN COMBO DISCOUNT (was hardcoded 10%) ──────────
+            // Instead of a fixed 10% discount, we now average the max_discount_pct
+            // across all products in the combo. If a product hasn't had its
+            // discount threshold set yet (null), we fall back to 10%.
+            // The result is capped at 15% to prevent over-discounting.
+            // e.g., products with max_discount [10%, 25%, 10%] → avg=15% → capped at 15%
+            const avgMaxDiscount = comboProducts.reduce((s, p) => s + (p.max_discount_pct != null ? p.max_discount_pct : 10), 0) / comboProducts.length;
+            const discountPct = Math.min(avgMaxDiscount, 15) / 100;
             const discountAmt = Math.round(totalSelling * discountPct);
             const comboPrice = totalSelling - discountAmt;
             const profitMargin = (comboPrice - totalCost) / comboPrice;
@@ -316,7 +323,12 @@ const generateSmartCombos = async (req, res) => {
 
                 const totalSelling = comboProducts.reduce((s, p) => s + p.selling_price, 0);
                 const totalCost = comboProducts.reduce((s, p) => s + p.cost, 0);
-                const discountPct = 0.12;
+                // ─── DATA-DRIVEN COMBO DISCOUNT (was hardcoded 12%) ──────
+                // Hidden gem boost combos get a slightly higher default (12%)
+                // since the goal is to boost discovery of low-demand items.
+                // Cap at 20% to preserve profitability.
+                const avgMaxDiscount = comboProducts.reduce((s, p) => s + (p.max_discount_pct != null ? p.max_discount_pct : 12), 0) / comboProducts.length;
+                const discountPct = Math.min(avgMaxDiscount, 20) / 100;
                 const discountAmt = Math.round(totalSelling * discountPct);
                 const comboPrice = totalSelling - discountAmt;
                 const profitMargin = (comboPrice - totalCost) / comboPrice;
@@ -728,4 +740,246 @@ const getComboAnalytics = async (req, res) => {
     }
 };
 
-module.exports = { generateSmartCombos, getProductAnalytics, getAssociationRules, getSuggestions, getComboAnalytics };
+// ─── STEP 7: Pricing & Discount Recommendations ─────────────────────────────
+// PURPOSE: Computes data-driven price suggestions and max discount thresholds
+// for every product. The owner sees these on the "Pricing" dashboard and can
+// accept, customize, or reject each recommendation.
+//
+// HOW IT WORKS:
+// 1. Reuses computeProductAnalytics() to get BCG classification (star/hidden_gem/volume_trap/dog)
+// 2. Computes demand score (0-100) and revenue contribution per product
+// 3. Calculates margin headroom = current margin% - 20% (min acceptable margin)
+// 4. Uses quadrant-specific rules to determine:
+//    - How much to adjust the price (increase for stars/volume_traps, decrease for hidden_gems/dogs)
+//    - The maximum discount % the product can sustain without going below 20% margin
+// 5. Returns per-product recommendations + a summary of overall revenue impact
+//
+// ENDPOINT: GET /api/combo/analytics/pricing
+const getPricingRecommendations = async (req, res) => {
+    try {
+        // Step 1: Get BCG classification and metrics for all products
+        const productAnalytics = await computeProductAnalytics();
+        const orders = await Order.find().lean();
+        const totalOrders = orders.length;
+        const allProducts = await Product.find().lean();
+
+        // Build a lookup map: product_id → product document
+        const productMap = {};
+        for (const p of allProducts) {
+            productMap[p._id.toString()] = p;
+        }
+
+        // Calculate total revenue across all products (used for revenue contribution %)
+        const totalRevenue = productAnalytics.reduce((s, p) => {
+            const stats = orders.reduce((acc, order) => {
+                for (const item of order.items) {
+                    if (item.product_id.toString() === p.product_id.toString()) {
+                        acc += (item.base_price || 0) * item.quantity;
+                    }
+                }
+                return acc;
+            }, 0);
+            return s + stats;
+        }, 0);
+
+        // Owner's minimum acceptable profit margin — discounts/prices are capped
+        // so the product never drops below this threshold
+        const MIN_ACCEPTABLE_MARGIN = 20; // 20%
+
+        // ─── QUADRANT-BASED PRICING RULES ────────────────────────────────
+        // Each BCG quadrant gets a different pricing strategy:
+        //   - maxDiscountCap: the ceiling on discount % for this quadrant
+        //   - priceAdjustMin/Max: the range of price change % to suggest
+        //   - strategy: human-readable explanation shown on the dashboard
+        const QUADRANT_RULES = {
+            // STARS: High margin + High demand → can charge more, don't need discounts
+            star: {
+                maxDiscountCap: 10,        // max 10% discount (they sell fine without discounts)
+                priceAdjustMin: 0,         // at minimum, keep current price
+                priceAdjustMax: 10,        // at maximum, increase by 10%
+                strategy: "Premium pricing — high demand allows price increases. Keep discounts minimal since these sell well already.",
+            },
+            // HIDDEN GEMS: High margin + Low demand → discount to boost discovery
+            hidden_gem: {
+                maxDiscountCap: 25,        // up to 25% discount (margin can absorb it)
+                priceAdjustMin: -5,        // slight price decrease to attract buyers
+                priceAdjustMax: 0,         // don't increase price (demand is already low)
+                strategy: "Discovery pricing — offer moderate discounts to boost trial and awareness. Margin headroom supports this.",
+            },
+            // VOLUME TRAPS: Low margin + High demand → must increase price
+            volume_trap: {
+                maxDiscountCap: 5,         // almost no discount (margin is already thin)
+                priceAdjustMin: 5,         // at minimum, increase by 5%
+                priceAdjustMax: 15,        // up to 15% increase to recover margin
+                strategy: "Margin recovery — increase price to improve thin margins. Avoid discounts since margin is already low.",
+            },
+            // DOGS: Low margin + Low demand → reduce price or bundle aggressively
+            dog: {
+                maxDiscountCap: 30,        // aggressive discounts to move inventory
+                priceAdjustMin: -10,       // reduce price up to 10%
+                priceAdjustMax: -5,        // at minimum, reduce by 5%
+                strategy: "Clear or revive — aggressive discounts to move inventory, or reduce price to attract attention. Consider bundling.",
+            },
+        };
+
+        // ─── COMPUTE RECOMMENDATIONS FOR EACH PRODUCT ─────────────────
+        const recommendations = productAnalytics.map(pa => {
+            const product = productMap[pa.product_id.toString()];
+            if (!product) return null;
+
+            // Get the pricing rules for this product's BCG quadrant
+            const rules = QUADRANT_RULES[pa.classification] || QUADRANT_RULES.dog;
+
+            // Margin headroom = how much margin % is above the minimum acceptable 20%
+            // e.g., if margin is 61% → headroom = 41% (can absorb up to 41% discount)
+            const marginHeadroom = Math.max(0, pa.margin_pct - MIN_ACCEPTABLE_MARGIN);
+
+            // Max discount is the LESSER of:
+            //   1. The margin headroom (can't discount below 20% margin)
+            //   2. The quadrant's cap (strategic limit — e.g., stars shouldn't get big discounts)
+            const maxDiscountPct = Math.min(marginHeadroom, rules.maxDiscountCap);
+
+            // Demand score (0-100): doubled frequency percentage, capped at 100
+            // e.g., order_frequency=0.35 → 35% * 2 = 70 demand score
+            const demandScore = Math.min(100, parseFloat((pa.order_frequency * 100 * 2).toFixed(1)));
+
+            // Revenue contribution — already computed by computeProductAnalytics()
+            const revenueContribution = pa.revenue_share;
+
+            // ─── DYNAMIC PRICE ADJUSTMENT ────────────────────────────────
+            // The adjustment % is interpolated within the quadrant's min/max range
+            // based on the product's specific metrics (demand or margin)
+            let priceAdjustPct;
+            if (pa.classification === "star") {
+                // Stars: higher demand → push closer to max increase (reward popularity)
+                // e.g., demand=70 → 0 + (0.70) * (10-0) = 7% increase
+                priceAdjustPct = rules.priceAdjustMin + (demandScore / 100) * (rules.priceAdjustMax - rules.priceAdjustMin);
+            } else if (pa.classification === "volume_trap") {
+                // Volume traps: lower margin → more urgent price increase
+                // marginDeficit = how far below the 50% threshold this product is
+                // e.g., margin=30% → deficit=(50-30)/50=0.4 → 5 + 0.4*10 = 9% increase
+                const marginDeficit = (50 - pa.margin_pct) / 50;
+                priceAdjustPct = rules.priceAdjustMin + marginDeficit * (rules.priceAdjustMax - rules.priceAdjustMin);
+            } else if (pa.classification === "hidden_gem") {
+                // Hidden gems: lower demand → bigger price decrease to attract trial
+                // e.g., demand=20 → -5 + (1-0.20) * (0-(-5)) = -5 + 4 = -1% decrease
+                priceAdjustPct = rules.priceAdjustMin + (1 - demandScore / 100) * (rules.priceAdjustMax - rules.priceAdjustMin);
+            } else {
+                // Dogs: lower demand → bigger price cut to revive interest
+                // e.g., demand=10 → -10 + (1-0.10) * (-5-(-10)) = -10 + 4.5 = -5.5% decrease
+                priceAdjustPct = rules.priceAdjustMin + (1 - demandScore / 100) * (rules.priceAdjustMax - rules.priceAdjustMin);
+            }
+
+            priceAdjustPct = parseFloat(priceAdjustPct.toFixed(1));
+            // Apply the percentage adjustment to current selling price
+            const suggestedPrice = Math.round(product.selling_price * (1 + priceAdjustPct / 100));
+
+            // Calculate the absolute floor price that maintains 20% margin
+            // Formula: minPrice = cost / (1 - 0.20) → e.g., cost=70 → 70/0.8 = ₹88
+            const minPrice = Math.round(product.cost / (1 - MIN_ACCEPTABLE_MARGIN / 100));
+
+            // Safety: never suggest a price below the floor
+            const finalSuggestedPrice = Math.max(suggestedPrice, minPrice);
+
+            return {
+                product_id: pa.product_id,
+                name: pa.name,
+                category: pa.category,
+                current_price: product.selling_price,
+                cost: product.cost,
+                suggested_price: finalSuggestedPrice,
+                price_change_pct: priceAdjustPct,
+                price_change_amt: finalSuggestedPrice - product.selling_price,
+                min_price: minPrice,
+                max_discount_pct: parseFloat(maxDiscountPct.toFixed(1)),
+                max_discount_amt: Math.round(product.selling_price * maxDiscountPct / 100),
+                margin_pct: pa.margin_pct,
+                margin_headroom: parseFloat(marginHeadroom.toFixed(1)),
+                demand_score: demandScore,
+                revenue_contribution: revenueContribution,
+                units_sold: pa.units_sold,
+                order_frequency: pa.order_frequency,
+                classification: pa.classification,
+                strategy: rules.strategy,
+            };
+        }).filter(Boolean);
+
+        // ─── SUMMARY STATISTICS ─────────────────────────────────────
+        // These are shown in the dashboard's top-level summary cards
+        const avgMargin = (recommendations.reduce((s, r) => s + r.margin_pct, 0) / recommendations.length).toFixed(1);
+        // Estimate total revenue impact if ALL suggestions were applied:
+        // sum of (price change per unit × units sold historically)
+        const totalPotentialRevChange = recommendations.reduce((s, r) => s + r.price_change_amt * r.units_sold, 0);
+
+        return res.status(200).json({
+            success: true,
+            total_products: recommendations.length,
+            total_orders_analyzed: totalOrders,
+            min_acceptable_margin: MIN_ACCEPTABLE_MARGIN,
+            summary: {
+                avg_margin: parseFloat(avgMargin),
+                potential_revenue_change: totalPotentialRevChange,
+                products_to_increase: recommendations.filter(r => r.price_change_amt > 0).length,
+                products_to_decrease: recommendations.filter(r => r.price_change_amt < 0).length,
+                products_no_change: recommendations.filter(r => r.price_change_amt === 0).length,
+            },
+            data: recommendations,
+        });
+    } catch (error) {
+        console.error("getPricingRecommendations error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ─── STEP 8: Apply Pricing Recommendation ────────────────────────────────────
+// PURPOSE: Called when the owner clicks "Apply Suggestion" or "Save Custom"
+// on the Pricing Dashboard. Persists the chosen price and discount threshold
+// to the product document in MongoDB.
+//
+// ENDPOINT: PUT /api/product/:id/pricing
+//
+// BODY PARAMS:
+//   - selling_price:    (optional) new selling price — updates the actual menu price
+//   - suggested_price:  (optional) store the analytics-recommended price for reference
+//   - max_discount_pct: (optional) the max discount % — used by combo generator
+//   - min_price:        (optional) the floor price below which we shouldn't go
+//
+// VALIDATION: selling_price must be >= cost (prevents negative margin)
+const applyPricing = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { selling_price, suggested_price, max_discount_pct, min_price } = req.body;
+
+        const product = await Product.findById(id);
+        if (!product) {
+            return res.status(404).json({ success: false, message: "Product not found" });
+        }
+
+        // Build update object — only include fields that were provided
+        const updates = {};
+        if (selling_price !== undefined) {
+            // Guard: never allow price below cost (would mean selling at a loss)
+            if (selling_price < product.cost) {
+                return res.status(400).json({ success: false, message: "Selling price cannot be less than cost" });
+            }
+            updates.selling_price = Number(selling_price);
+        }
+        if (suggested_price !== undefined) updates.suggested_price = Number(suggested_price);
+        // max_discount_pct is stored on the product so that generateSmartCombos()
+        // can read it when computing combo discounts (instead of using hardcoded 10%/12%)
+        if (max_discount_pct !== undefined) updates.max_discount_pct = Number(max_discount_pct);
+        if (min_price !== undefined) updates.min_price = Number(min_price);
+
+        const updated = await Product.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true });
+
+        return res.status(200).json({
+            success: true,
+            message: "Pricing updated successfully",
+            data: updated,
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { generateSmartCombos, getProductAnalytics, getAssociationRules, getSuggestions, getComboAnalytics, getPricingRecommendations, applyPricing };

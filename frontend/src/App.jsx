@@ -4,6 +4,7 @@ import ProductAnalytics from './pages/ProductAnalytics'
 import ComboGenerator from './pages/ComboGenerator'
 import SuggestView from './pages/SuggestView'
 import ManageCombos from './pages/ManageCombos'
+import Orders from './pages/Orders'
 
 const API_BASE = 'http://localhost:3001/api'
 
@@ -12,6 +13,7 @@ const NAV_ITEMS = [
   { id: 'combos', label: 'Combos' },
   { id: 'manage', label: 'Manage' },
   { id: 'suggest', label: 'Upsell' },
+  { id: 'orders', label: 'Orders' },
 ]
 
 function App() {
@@ -42,6 +44,7 @@ function App() {
         {activeTab === 'combos' && <ComboGenerator apiBase={API_BASE} />}
         {activeTab === 'manage' && <ManageCombos apiBase={API_BASE} />}
         {activeTab === 'suggest' && <SuggestView apiBase={API_BASE} />}
+        {activeTab === 'orders' && <Orders apiBase={API_BASE} />}
       </main>
     </div>
   )

@@ -43,10 +43,13 @@ export default function PricingDashboard({ apiBase }) {
         const id = product.product_id
         setApplying(prev => ({ ...prev, [id]: true }))
 
+        const newSellingPrice = overrides.selling_price ?? product.suggested_price
+        const newMaxDiscountPct = overrides.max_discount_pct ?? product.max_discount_pct
+
         const body = {
-            selling_price: overrides.selling_price ?? product.suggested_price,
+            selling_price: newSellingPrice,
             suggested_price: product.suggested_price,
-            max_discount_pct: overrides.max_discount_pct ?? product.max_discount_pct,
+            max_discount_pct: newMaxDiscountPct,
             min_price: product.min_price,
         }
 
@@ -60,7 +63,23 @@ export default function PricingDashboard({ apiBase }) {
             if (json.success) {
                 showToast(`${product.name} pricing updated`)
                 setEditingId(null)
-                fetchData()
+                // Update only the affected product in local state — no full page reload
+                setData(prev => ({
+                    ...prev,
+                    data: prev.data.map(p =>
+                        p.product_id === id
+                            ? {
+                                ...p,
+                                current_price: newSellingPrice,
+                                suggested_price: newSellingPrice,   // suggestion is now the live price
+                                price_change_amt: 0,                // no remaining change after applying
+                                price_change_pct: 0,
+                                max_discount_pct: newMaxDiscountPct,
+                                max_discount_amt: Math.round(newSellingPrice * newMaxDiscountPct / 100),
+                            }
+                            : p
+                    )
+                }))
             } else {
                 showToast(json.message || 'Failed to apply', 'error')
             }

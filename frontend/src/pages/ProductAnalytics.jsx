@@ -104,7 +104,30 @@ export default function ProductAnalytics({ apiBase }) {
 
             if (json.success) {
                 setIsEditModalOpen(false)
-                fetchData()
+                // Patch only the edited row in local state — no full reload
+                const newSelling = Number(editForm.selling_price)
+                const newCost = Number(editForm.cost)
+                const newMargin = newSelling - newCost
+                const newMarginPct = newSelling > 0
+                    ? parseFloat(((newMargin / newSelling) * 100).toFixed(1))
+                    : 0
+                setData(prev => ({
+                    ...prev,
+                    data: prev.data.map(p =>
+                        p.product_id === editingProduct.product_id
+                            ? {
+                                ...p,
+                                name: editForm.name,
+                                category: editForm.category,
+                                selling_price: newSelling,
+                                cost: newCost,
+                                description: editForm.description,
+                                margin: newMargin,
+                                margin_pct: newMarginPct,
+                            }
+                            : p
+                    )
+                }))
             } else {
                 setEditError(json.message || 'Failed to update product')
             }
@@ -121,7 +144,12 @@ export default function ProductAnalytics({ apiBase }) {
             const res = await fetch(`${apiBase}/product/${id}`, { method: 'DELETE' });
             const json = await res.json();
             if (json.success) {
-                fetchData();
+                // Remove the deleted row from local state — no full reload
+                setData(prev => ({
+                    ...prev,
+                    total_products: prev.total_products - 1,
+                    data: prev.data.filter(p => p.product_id !== id)
+                }))
             } else {
                 alert(json.message || 'Failed to delete product');
             }
@@ -450,96 +478,7 @@ export default function ProductAnalytics({ apiBase }) {
                 </div>
             )}
 
-            {/* EDIT PRODUCT MODAL */}
-            {isEditModalOpen && (
-                <div className="modal-overlay" onClick={() => !isSubmitting && setIsEditModalOpen(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>Edit Product</h3>
-                            <button className="modal-close" onClick={() => !isSubmitting && setIsEditModalOpen(false)}>×</button>
-                        </div>
-                        <form onSubmit={handleEditProduct}>
-                            <div className="modal-body">
-                                {editError && (
-                                    <div style={{ padding: '10px 14px', background: 'var(--negative-subtle)', color: 'var(--negative)', borderRadius: 'var(--radius)', marginBottom: '16px', fontSize: '13px', fontWeight: 500 }}>
-                                        {editError}
-                                    </div>
-                                )}
-                                <div className="form-group">
-                                    <label>Product Name</label>
-                                    <input
-                                        type="text"
-                                        required
-                                        value={editForm.name}
-                                        onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                                    />
-                                </div>
-                                <div className="form-group">
-                                    <label>Category</label>
-                                    <select
-                                        required
-                                        value={editForm.category}
-                                        onChange={e => setEditForm(prev => ({ ...prev, category: e.target.value }))}
-                                        style={{ width: '100%', padding: '8px 12px', borderRadius: 'var(--radius)', border: '1px solid var(--border-medium)', background: 'var(--bg-surface)', color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'inherit' }}
-                                    >
-                                        <option value="main">Main</option>
-                                        <option value="snack">Snack</option>
-                                        <option value="dessert">Dessert</option>
-                                        <option value="beverages">Beverages</option>
-                                    </select>
-                                </div>
-                                <div style={{ display: 'flex', gap: '12px' }}>
-                                    <div className="form-group">
-                                        <label>Selling Price (&#x20B9;)</label>
-                                        <input
-                                            type="number"
-                                            required
-                                            min="0"
-                                            value={editForm.selling_price}
-                                            onChange={e => setEditForm(prev => ({ ...prev, selling_price: e.target.value }))}
-                                        />
-                                    </div>
-                                    <div className="form-group">
-                                        <label>Cost (&#x20B9;)</label>
-                                        <input
-                                            type="number"
-                                            required
-                                            min="0"
-                                            value={editForm.cost}
-                                            onChange={e => setEditForm(prev => ({ ...prev, cost: e.target.value }))}
-                                        />
-                                    </div>
-                                </div>
-                                <div className="form-group">
-                                    <label>Description (Optional)</label>
-                                    <textarea
-                                        rows="2"
-                                        value={editForm.description}
-                                        onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                                    />
-                                </div>
-                            </div>
-                            <div className="modal-footer">
-                                <button
-                                    type="button"
-                                    className="btn-cancel"
-                                    onClick={() => setIsEditModalOpen(false)}
-                                    disabled={isSubmitting}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="btn-save"
-                                    disabled={isSubmitting || !editForm.name || !editForm.selling_price || !editForm.cost}
-                                >
-                                    {isSubmitting ? 'Saving...' : 'Save Changes'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+
         </>
     )
 }

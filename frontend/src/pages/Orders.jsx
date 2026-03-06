@@ -48,7 +48,17 @@ export default function Orders({ apiBase }) {
             const json = await res.json()
             if (json.success) {
                 setIsEditModalOpen(false)
-                fetchOrders()
+                // Patch only the edited row in local state — no full reload
+                setOrders(prev => prev.map(o =>
+                    o.order_id === editingOrder.order_id
+                        ? {
+                            ...o,
+                            final_price: Number(editForm.final_price),
+                            discount: Number(editForm.discount),
+                            order_channel: editForm.order_channel,
+                        }
+                        : o
+                ))
             } else {
                 alert(json.message || 'Failed to update order')
             }
@@ -64,7 +74,8 @@ export default function Orders({ apiBase }) {
             const res = await fetch(`${apiBase}/order/${id}`, { method: 'DELETE' })
             const json = await res.json()
             if (json.success) {
-                fetchOrders()
+                // Remove the deleted row from local state — no full reload
+                setOrders(prev => prev.filter(o => o.order_id !== id))
             } else {
                 alert(json.message || 'Failed to delete order')
             }

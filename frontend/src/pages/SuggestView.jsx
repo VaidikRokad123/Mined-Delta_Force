@@ -7,7 +7,6 @@ export default function SuggestView({ apiBase }) {
     const [loading, setLoading] = useState(true)
     const [suggestLoading, setSuggestLoading] = useState(false)
 
-    // Manual combo creation
     const [pickedItems, setPickedItems] = useState(new Set())
     const [modalOpen, setModalOpen] = useState(false)
     const [comboForm, setComboForm] = useState(null)
@@ -44,7 +43,6 @@ export default function SuggestView({ apiBase }) {
         setTimeout(() => setToast(null), 3000)
     }
 
-    // Toggle picking an item for combo
     const togglePick = (productId) => {
         setPickedItems(prev => {
             const next = new Set(prev)
@@ -54,11 +52,8 @@ export default function SuggestView({ apiBase }) {
         })
     }
 
-    // Open the combo creation modal
     const openCreateCombo = () => {
         if (!suggestions) return
-
-        // Build items list: base product + all picked suggestions
         const baseProduct = suggestions.product
         const allItems = [
             { product_id: baseProduct._id, name: baseProduct.name, quantity: 1, base_price: baseProduct.selling_price }
@@ -113,7 +108,7 @@ export default function SuggestView({ apiBase }) {
             })
             const result = await res.json()
             if (result.success) {
-                showToast(`"${comboForm.combo_name}" saved to database!`)
+                showToast(`"${comboForm.combo_name}" saved`)
                 setModalOpen(false)
                 setPickedItems(new Set())
             } else {
@@ -125,7 +120,7 @@ export default function SuggestView({ apiBase }) {
         setSaving(false)
     }
 
-    if (loading) return <div className="loading"><div className="spinner"></div><p>Loading menu…</p></div>
+    if (loading) return <div className="loading"><div className="spinner"></div><p>Loading menu...</p></div>
 
     const selectedProduct = products.find(p => p.product_id === selectedId)
     const pickedCount = pickedItems.size
@@ -133,7 +128,7 @@ export default function SuggestView({ apiBase }) {
     return (
         <>
             <div className="page-header">
-                <h2>💡 Upsell Suggestions</h2>
+                <h2>Upsell Suggestions</h2>
                 <p>Select a product to see what customers usually order with it</p>
             </div>
 
@@ -150,47 +145,47 @@ export default function SuggestView({ apiBase }) {
                             onClick={() => handleSelect(p.product_id)}
                         >
                             {p.name}
-                            <span className="product-cat">{p.category} · ₹{p.selling_price}</span>
+                            <span className="product-cat">{p.category} &middot; {'\u20B9'}{p.selling_price}</span>
                         </button>
                     ))}
                 </div>
             </div>
 
             {suggestLoading && (
-                <div className="loading"><div className="spinner"></div><p>Finding suggestions for {selectedProduct?.name}…</p></div>
+                <div className="loading"><div className="spinner"></div><p>Finding suggestions for {selectedProduct?.name}...</p></div>
             )}
 
             {suggestions && (
                 <>
                     <div className="stats-row">
                         <div className="stat-card">
-                            <div className="stat-label">Selected Product</div>
-                            <div className="stat-value" style={{ fontSize: 20 }}>{suggestions.product.name}</div>
-                            <div className="stat-sub">₹{suggestions.product.selling_price} · {suggestions.product.category}</div>
+                            <div className="stat-label">Selected</div>
+                            <div className="stat-value" style={{ fontSize: 18 }}>{suggestions.product.name}</div>
+                            <div className="stat-sub">{'\u20B9'}{suggestions.product.selling_price} &middot; {suggestions.product.category}</div>
                         </div>
                         <div className="stat-card">
                             <div className="stat-label">Orders Analyzed</div>
                             <div className="stat-value">{suggestions.total_orders_analyzed}</div>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-label">Orders with this item</div>
-                            <div className="stat-value" style={{ color: 'var(--accent-light)' }}>{suggestions.orders_containing_product}</div>
-                            <div className="stat-sub">{((suggestions.orders_containing_product / suggestions.total_orders_analyzed) * 100).toFixed(1)}% of all orders</div>
+                            <div className="stat-label">Contains This Item</div>
+                            <div className="stat-value">{suggestions.orders_containing_product}</div>
+                            <div className="stat-sub">{((suggestions.orders_containing_product / suggestions.total_orders_analyzed) * 100).toFixed(1)}% of orders</div>
                         </div>
                         <div className="stat-card">
-                            <div className="stat-label">Suggestions Found</div>
-                            <div className="stat-value" style={{ color: 'var(--success)' }}>{suggestions.individual_suggestions.length}</div>
+                            <div className="stat-label">Suggestions</div>
+                            <div className="stat-value">{suggestions.individual_suggestions.length}</div>
                         </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                         <div className="card">
                             <div className="card-header">
-                                <h3>🛒 Individual Suggestions</h3>
+                                <h3>Individual Suggestions</h3>
                                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                     {pickedCount > 0 && (
-                                        <button className="btn-add" style={{ width: 'auto', padding: '6px 14px' }} onClick={openCreateCombo}>
-                                            ✨ Create Combo ({pickedCount} + {suggestions.product.name.split(' ')[0]})
+                                        <button className="btn-add" style={{ width: 'auto', padding: '6px 12px', fontSize: 12 }} onClick={openCreateCombo}>
+                                            Create Combo ({pickedCount} + {suggestions.product.name.split(' ')[0]})
                                         </button>
                                     )}
                                     <span className="badge badge-success">Top {suggestions.individual_suggestions.length}</span>
@@ -199,11 +194,11 @@ export default function SuggestView({ apiBase }) {
 
                             {pickedCount > 0 && (
                                 <div style={{
-                                    padding: '10px 14px', marginBottom: 12, borderRadius: 'var(--radius-sm)',
-                                    background: 'var(--accent-bg)', border: '1px solid var(--border-active)',
-                                    fontSize: 13, color: 'var(--accent-light)'
+                                    padding: '8px 12px', marginBottom: 10, borderRadius: 'var(--radius)',
+                                    background: 'var(--accent-subtle)', border: '1px solid var(--accent)',
+                                    fontSize: 12, color: 'var(--accent-text)'
                                 }}>
-                                    📦 <strong>{suggestions.product.name}</strong> + {
+                                    <strong>{suggestions.product.name}</strong> + {
                                         suggestions.individual_suggestions
                                             .filter(s => pickedItems.has(s.product_id))
                                             .map(s => s.name).join(' + ')
@@ -221,28 +216,28 @@ export default function SuggestView({ apiBase }) {
                                             className="suggestion-item"
                                             key={i}
                                             style={{
-                                                flexDirection: 'column', alignItems: 'stretch', gap: 8,
+                                                flexDirection: 'column', alignItems: 'stretch', gap: 6,
                                                 borderColor: isPicked ? 'var(--accent)' : undefined,
-                                                background: isPicked ? 'var(--accent-bg)' : undefined,
+                                                background: isPicked ? 'var(--accent-subtle)' : undefined,
                                             }}
                                         >
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                                                {/* Checkbox */}
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                                                 <button
                                                     onClick={() => togglePick(s.product_id)}
                                                     style={{
-                                                        width: 28, height: 28, borderRadius: 6, border: `2px solid ${isPicked ? 'var(--accent)' : 'var(--border)'}`,
+                                                        width: 22, height: 22, borderRadius: 'var(--radius-sm)',
+                                                        border: `2px solid ${isPicked ? 'var(--accent)' : 'var(--border-medium)'}`,
                                                         background: isPicked ? 'var(--accent)' : 'transparent', color: 'white',
                                                         cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                                        fontSize: 14, flexShrink: 0, transition: 'var(--transition)'
+                                                        fontSize: 12, flexShrink: 0, transition: 'all var(--transition)', fontFamily: 'inherit'
                                                     }}
                                                 >
-                                                    {isPicked ? '✓' : ''}
+                                                    {isPicked ? '\u2713' : ''}
                                                 </button>
 
                                                 <div className="suggestion-rank">{i + 1}</div>
                                                 <div className="suggestion-info" style={{ flex: 1 }}>
-                                                    <h4>{s.name} <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-muted)' }}>₹{s.selling_price} · {s.category}</span></h4>
+                                                    <h4>{s.name} <span style={{ fontWeight: 400, fontSize: 11, color: 'var(--text-muted)' }}>{'\u20B9'}{s.selling_price} &middot; {s.category}</span></h4>
                                                     <div className="reason" style={{ fontWeight: 500 }}>{s.reason}</div>
                                                 </div>
                                                 <div className="suggestion-score">
@@ -251,40 +246,37 @@ export default function SuggestView({ apiBase }) {
                                                 </div>
                                             </div>
 
-                                            {/* Insight Tags */}
                                             {s.insight_tags && s.insight_tags.length > 0 && (
-                                                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                                                     {s.insight_tags.map((tag, t) => (
                                                         <span key={t} style={{
-                                                            fontSize: 10, padding: '3px 8px', borderRadius: 4,
-                                                            fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px',
-                                                            background: tag.includes('Margin') ? (tag.includes('High') ? 'var(--success-bg)' : tag.includes('Good') ? 'var(--star-bg)' : 'var(--trap-bg)')
-                                                                : tag.includes('Strong') ? 'var(--gem-bg)' : 'var(--accent-bg)',
-                                                            color: tag.includes('Margin') ? (tag.includes('High') ? 'var(--success)' : tag.includes('Good') ? 'var(--star)' : 'var(--trap)')
-                                                                : tag.includes('Strong') ? 'var(--gem)' : 'var(--accent-light)',
+                                                            fontSize: 10, padding: '2px 6px', borderRadius: 'var(--radius-sm)',
+                                                            fontWeight: 600, letterSpacing: '0.2px',
+                                                            background: tag.includes('Margin') ? (tag.includes('High') ? 'var(--positive-subtle)' : tag.includes('Good') ? 'var(--caution-subtle)' : 'var(--negative-subtle)')
+                                                                : tag.includes('Strong') ? 'var(--classify-gem-bg)' : 'var(--neutral-subtle)',
+                                                            color: tag.includes('Margin') ? (tag.includes('High') ? 'var(--positive)' : tag.includes('Good') ? 'var(--caution)' : 'var(--negative)')
+                                                                : tag.includes('Strong') ? 'var(--classify-gem)' : 'var(--neutral)',
                                                         }}>{tag}</span>
                                                     ))}
                                                 </div>
                                             )}
 
-                                            {/* Detailed Insight */}
                                             {s.insight && (
                                                 <div style={{
-                                                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5,
-                                                    padding: '8px 12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)',
-                                                    borderLeft: '3px solid var(--accent)'
+                                                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.4,
+                                                    padding: '6px 10px', background: 'var(--bg-surface-alt)', borderRadius: 'var(--radius-sm)',
+                                                    borderLeft: '2px solid var(--accent)'
                                                 }}>
                                                     {s.insight}
                                                 </div>
                                             )}
 
-                                            {/* Quick Stats */}
-                                            <div style={{ display: 'flex', gap: 14, fontSize: 11, color: 'var(--text-muted)' }}>
-                                                <span>📊 Conf: {(s.confidence * 100).toFixed(1)}%</span>
-                                                <span>📈 Lift: {s.lift}</span>
-                                                <span>🤝 Compat: {s.compatibility}</span>
-                                                <span>💰 Profit: ₹{s.profit_per_unit || '—'}/unit</span>
-                                                <span>🛒 Bought together: {s.times_bought_together}x</span>
+                                            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: 'var(--text-muted)' }}>
+                                                <span>Conf: {(s.confidence * 100).toFixed(1)}%</span>
+                                                <span>Lift: {s.lift}</span>
+                                                <span>Compat: {s.compatibility}</span>
+                                                <span>Profit: {'\u20B9'}{s.profit_per_unit || '\u2014'}/unit</span>
+                                                <span>Together: {s.times_bought_together}x</span>
                                             </div>
                                         </div>
                                     )
@@ -294,28 +286,27 @@ export default function SuggestView({ apiBase }) {
 
                         <div className="card">
                             <div className="card-header">
-                                <h3>🎯 Combo Suggestions</h3>
+                                <h3>Combo Suggestions</h3>
                                 <span className="badge badge-gem">{suggestions.combo_suggestions.length} combos</span>
                             </div>
                             {suggestions.combo_suggestions.length === 0 ? (
                                 <div className="empty-state">
-                                    <div className="empty-icon">📦</div>
-                                    <p>No saved combos contain this product yet.<br />Use the Smart Combos tab to generate new ones!</p>
+                                    <p>No saved combos contain this product yet.<br />Use the Combos tab to generate new ones.</p>
                                 </div>
                             ) : (
                                 suggestions.combo_suggestions.map((c, i) => (
-                                    <div className="combo-card" key={i} style={{ marginBottom: 12 }}>
+                                    <div className="combo-card" key={i} style={{ marginBottom: 10 }}>
                                         <h4>{c.combo_name}</h4>
                                         <div className="combo-items">
                                             {c.items.map((item, j) => (
                                                 <span className="combo-item-tag" key={j}>
-                                                    {item.name} (₹{item.base_price})
+                                                    {item.name} ({'\u20B9'}{item.base_price})
                                                 </span>
                                             ))}
                                         </div>
                                         <div className="combo-price-row">
-                                            <span className="combo-discount">Save ₹{c.discount}</span>
-                                            <span className="combo-final-price">₹{c.combo_price}</span>
+                                            <span className="combo-discount">Save {'\u20B9'}{c.discount}</span>
+                                            <span className="combo-final-price">{'\u20B9'}{c.combo_price}</span>
                                         </div>
                                     </div>
                                 ))
@@ -325,13 +316,12 @@ export default function SuggestView({ apiBase }) {
                 </>
             )}
 
-            {/* ─── CREATE COMBO MODAL ─────────────────────────────── */}
             {modalOpen && comboForm && (
                 <div className="modal-overlay" onClick={() => setModalOpen(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3>Create Manual Combo</h3>
-                            <button className="modal-close" onClick={() => setModalOpen(false)}>✕</button>
+                            <h3>Create Combo</h3>
+                            <button className="modal-close" onClick={() => setModalOpen(false)}>&#x2715;</button>
                         </div>
 
                         <div className="modal-body">
@@ -346,29 +336,23 @@ export default function SuggestView({ apiBase }) {
                                     value={comboForm.description}
                                     onChange={e => handleFormChange('description', e.target.value)}
                                     rows={2}
-                                    style={{
-                                        width: '100%', padding: '10px 14px', borderRadius: 'var(--radius-sm)',
-                                        border: '1px solid var(--border)', background: 'var(--bg-card)',
-                                        color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'inherit',
-                                        resize: 'vertical'
-                                    }}
                                 />
                             </div>
 
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label>Combo Price (₹)</label>
+                                    <label>Combo Price ({'\u20B9'})</label>
                                     <input type="number" value={comboForm.combo_price} onChange={e => handleFormChange('combo_price', e.target.value)} />
                                 </div>
                                 <div className="form-group">
-                                    <label>Original Price (₹)</label>
+                                    <label>Original Price ({'\u20B9'})</label>
                                     <input type="number" value={comboForm.total_selling_price} onChange={e => handleFormChange('total_selling_price', e.target.value)} />
                                 </div>
                             </div>
 
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label>Discount (₹)</label>
+                                    <label>Discount ({'\u20B9'})</label>
                                     <input type="number" value={comboForm.discount} onChange={e => handleFormChange('discount', e.target.value)} />
                                 </div>
                                 <div className="form-group">
@@ -378,12 +362,12 @@ export default function SuggestView({ apiBase }) {
                             </div>
 
                             <div className="form-group">
-                                <label>Items in Combo</label>
+                                <label>Items</label>
                                 <div className="modal-items-list">
                                     {comboForm.items.map((item, i) => (
                                         <div className="modal-item" key={i}>
                                             <span className="modal-item-name">{item.name}</span>
-                                            <span className="modal-item-price">₹{item.base_price}</span>
+                                            <span className="modal-item-price">{'\u20B9'}{item.base_price}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -393,17 +377,16 @@ export default function SuggestView({ apiBase }) {
                         <div className="modal-footer">
                             <button className="btn-cancel" onClick={() => setModalOpen(false)}>Cancel</button>
                             <button className="btn-save" onClick={handleSaveCombo} disabled={saving}>
-                                {saving ? 'Saving…' : '💾 Save to Database'}
+                                {saving ? 'Saving...' : 'Save Combo'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ─── TOAST ─────────────────────────────────────────── */}
             {toast && (
                 <div className={`toast toast-${toast.type}`}>
-                    {toast.type === 'success' ? '✅' : '❌'} {toast.msg}
+                    {toast.msg}
                 </div>
             )}
         </>

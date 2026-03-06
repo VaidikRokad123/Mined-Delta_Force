@@ -595,4 +595,137 @@ const getSuggestions = async (req, res) => {
     }
 };
 
-module.exports = { generateSmartCombos, getProductAnalytics, getAssociationRules, getSuggestions };
+// ─── Combo-specific Analytics ────────────────────────────────────────────────
+// GET /api/combo/analytics/combo/:comboId
+const getComboAnalytics = async (req, res) => {
+    try {
+        const { comboId } = req.params;
+        const combo = await Combo.findById(comboId).lean();
+        if (!combo) {
+            return res.status(404).json({ success: false, message: "Combo not found" });
+        }
+
+        const productAnalytics = await computeProductAnalytics();
+        const analyticsMap = {};
+        for (const a of productAnalytics) {
+            analyticsMap[a.product_id.toString()] = a;
+        }
+
+        const orders = await Order.find().lean();
+        const totalOrders = orders.length;
+        const allProducts = await Product.find().lean();
+        const productMap = {};
+        for (const p of allProducts) {
+            productMap[p._id.toString()] = p;
+        }
+
+        // Item-level analytics
+        const itemIds = combo.items.map(i => i.product_id.toString());
+        const item_analytics = combo.items.map(i => {
+            const pid = i.product_id.toString();
+            const pa = analyticsMap[pid];
+            const prod = productMap[pid];
+            return {
+                name: i.name,
+                category: prod?.category || "unknown",
+                selling_price: i.base_price,
+                cost: prod?.cost || 0,
+                margin_pct: pa?.margin_pct || 0,
+                units_sold: pa?.units_sold || 0,
+                order_frequency: pa?.order_frequency || 0,
+                classification: pa?.classification || "dog",
+            };
+        });
+
+        // Pairwise association data
+        const itemFreq = {};
+        const pairFreq = {};
+        for (const order of orders) {
+            const pids = [...new Set(order.items.map(i => i.product_id.toString()))];
+            for (const pid of pids) {
+                itemFreq[pid] = (itemFreq[pid] || 0) + 1;
+            }
+            for (let i = 0; i < pids.length; i++) {
+                for (let j = i + 1; j < pids.length; j++) {
+                    const key = [pids[i], pids[j]].sort().join("|");
+                    pairFreq[key] = (pairFreq[key] || 0) + 1;
+                }
+            }
+        }
+
+        const pairwise_associations = [];
+        for (let i = 0; i < itemIds.length; i++) {
+            for (let j = i + 1; j < itemIds.length; j++) {
+                const idA = itemIds[i];
+                const idB = itemIds[j];
+                const key = [idA, idB].sort().join("|");
+                const count = pairFreq[key] || 0;
+                const freqA = itemFreq[idA] || 0;
+                const freqB = itemFreq[idB] || 0;
+                const confAB = freqA > 0 ? count / freqA : 0;
+                const confBA = freqB > 0 ? count / freqB : 0;
+                const lift = (freqA > 0 && freqB > 0 && totalOrders > 0)
+                    ? (count / totalOrders) / ((freqA / totalOrders) * (freqB / totalOrders))
+                    : 0;
+
+                let affinity = "weak";
+                if (lift >= 2.5 && Math.max(confAB, confBA) >= 0.4) affinity = "very_strong";
+                else if (lift >= 1.5 && Math.max(confAB, confBA) >= 0.3) affinity = "strong";
+                else if (lift >= 1.0) affinity = "moderate";
+
+                const nameA = combo.items.find(it => it.product_id.toString() === idA)?.name || idA;
+                const nameB = combo.items.find(it => it.product_id.toString() === idB)?.name || idB;
+
+                pairwise_associations.push({
+                    item_a: nameA,
+                    item_b: nameB,
+                    times_bought_together: count,
+                    confidence_a_to_b: parseFloat(confAB.toFixed(4)),
+                    confidence_b_to_a: parseFloat(confBA.toFixed(4)),
+                    lift: parseFloat(lift.toFixed(4)),
+                    affinity,
+                });
+            }
+        }
+
+        // Full-combo co-occurrence (all items in same order)
+        let fullComboOrders = 0;
+        for (const order of orders) {
+            const orderPids = new Set(order.items.map(i => i.product_id.toString()));
+            if (itemIds.every(id => orderPids.has(id))) fullComboOrders++;
+        }
+
+        // Compatibility score
+        const comboProducts = itemIds.map(id => productMap[id]).filter(Boolean);
+        const compatScore = getCompatibilityScore(comboProducts);
+
+        // Overall
+        const totalCost = comboProducts.reduce((s, p) => s + p.cost, 0);
+        const comboMargin = combo.combo_price - totalCost;
+        const comboMarginPct = combo.combo_price > 0 ? ((comboMargin / combo.combo_price) * 100).toFixed(1) : "0";
+        const savings = combo.total_selling_price - combo.combo_price;
+        const savingsPct = combo.total_selling_price > 0 ? ((savings / combo.total_selling_price) * 100).toFixed(1) : "0";
+
+        return res.status(200).json({
+            success: true,
+            combo: { combo_name: combo.combo_name },
+            overall: {
+                combo_margin: comboMargin,
+                combo_margin_pct: comboMarginPct,
+                savings_for_customer: savings,
+                savings_pct: savingsPct,
+                compatibility_score: parseFloat(compatScore.toFixed(2)),
+                full_combo_orders: fullComboOrders,
+                full_combo_rate: totalOrders > 0 ? ((fullComboOrders / totalOrders) * 100).toFixed(1) : "0",
+                total_orders_analyzed: totalOrders,
+            },
+            item_analytics,
+            pairwise_associations,
+        });
+    } catch (error) {
+        console.error("getComboAnalytics error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { generateSmartCombos, getProductAnalytics, getAssociationRules, getSuggestions, getComboAnalytics };

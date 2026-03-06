@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 
 const CLASSIFICATION_META = {
-    star: { emoji: '⭐', label: 'Star', badgeClass: 'badge-star', desc: 'High Margin + High Sales' },
-    hidden_gem: { emoji: '💎', label: 'Hidden Gem', badgeClass: 'badge-gem', desc: 'High Margin + Low Sales' },
-    volume_trap: { emoji: '⚠️', label: 'Volume Trap', badgeClass: 'badge-trap', desc: 'Low Margin + High Sales' },
-    dog: { emoji: '❌', label: 'Dog', badgeClass: 'badge-dog', desc: 'Low Margin + Low Sales' },
+    star: { label: 'Star', badgeClass: 'badge-star', desc: 'High Margin + High Sales' },
+    hidden_gem: { label: 'Hidden Gem', badgeClass: 'badge-gem', desc: 'High Margin + Low Sales' },
+    volume_trap: { label: 'Volume Trap', badgeClass: 'badge-trap', desc: 'Low Margin + High Sales' },
+    dog: { label: 'Dog', badgeClass: 'badge-dog', desc: 'Low Margin + Low Sales' },
 }
 
 export default function ProductAnalytics({ apiBase }) {
@@ -19,8 +19,8 @@ export default function ProductAnalytics({ apiBase }) {
             .catch(() => setLoading(false))
     }, [apiBase])
 
-    if (loading) return <div className="loading"><div className="spinner"></div><p>Analyzing products…</p></div>
-    if (!data?.success) return <div className="empty-state"><div className="empty-icon">📭</div><p>No data available</p></div>
+    if (loading) return <div className="loading"><div className="spinner"></div><p>Analyzing products...</p></div>
+    if (!data?.success) return <div className="empty-state"><p>No data available</p></div>
 
     const products = [...data.data]
     if (sortBy === 'classification') {
@@ -42,14 +42,14 @@ export default function ProductAnalytics({ apiBase }) {
     return (
         <>
             <div className="page-header">
-                <h2>📊 Product Analytics</h2>
+                <h2>Product Analytics</h2>
                 <p>Profitability matrix for {data.total_products} products across all categories</p>
             </div>
 
             <div className="stats-row">
                 {Object.entries(CLASSIFICATION_META).map(([key, meta]) => (
                     <div className="stat-card" key={key}>
-                        <div className="stat-label">{meta.emoji} {meta.label}</div>
+                        <div className="stat-label">{meta.label}</div>
                         <div className="stat-value">{counts[key] || 0}</div>
                         <div className="stat-sub">{meta.desc}</div>
                     </div>
@@ -63,9 +63,9 @@ export default function ProductAnalytics({ apiBase }) {
                         value={sortBy}
                         onChange={e => setSortBy(e.target.value)}
                         style={{
-                            background: 'var(--bg-secondary)', color: 'var(--text-primary)',
-                            border: '1px solid var(--border)', borderRadius: '6px',
-                            padding: '6px 12px', fontSize: '12px', cursor: 'pointer'
+                            background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                            border: '1px solid var(--border-medium)', borderRadius: 'var(--radius)',
+                            padding: '6px 12px', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit'
                         }}
                     >
                         <option value="classification">Sort: Classification</option>
@@ -97,16 +97,16 @@ export default function ProductAnalytics({ apiBase }) {
                                     <tr key={p.product_id}>
                                         <td style={{ fontWeight: 600 }}>{p.name}</td>
                                         <td><span style={{ textTransform: 'capitalize' }}>{p.category}</span></td>
-                                        <td>₹{p.selling_price}</td>
-                                        <td>₹{p.cost}</td>
-                                        <td>₹{p.margin}</td>
+                                        <td>{'\u20B9'}{p.selling_price}</td>
+                                        <td>{'\u20B9'}{p.cost}</td>
+                                        <td>{'\u20B9'}{p.margin}</td>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                 {p.margin_pct}%
-                                                <div className="score-bar" style={{ width: 60 }}>
+                                                <div className="score-bar" style={{ width: 50 }}>
                                                     <div className="score-bar-fill" style={{
                                                         width: `${p.margin_pct}%`,
-                                                        background: p.margin_pct >= 60 ? '#10b981' : p.margin_pct >= 40 ? '#f59e0b' : '#ef4444'
+                                                        background: p.margin_pct >= 60 ? 'var(--positive)' : p.margin_pct >= 40 ? 'var(--caution)' : 'var(--negative)'
                                                     }} />
                                                 </div>
                                             </div>
@@ -116,7 +116,7 @@ export default function ProductAnalytics({ apiBase }) {
                                         <td>{p.revenue_share}%</td>
                                         <td>
                                             <span className={`badge ${meta.badgeClass}`}>
-                                                {meta.emoji} {meta.label}
+                                                {meta.label}
                                             </span>
                                         </td>
                                     </tr>

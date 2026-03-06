@@ -5,13 +5,13 @@ import ComboGenerator from './pages/ComboGenerator'
 import SuggestView from './pages/SuggestView'
 import ManageCombos from './pages/ManageCombos'
 
-const API_BASE = 'http://localhost:3000/api'
+const API_BASE = 'http://localhost:3001/api'
 
 const NAV_ITEMS = [
-  { id: 'products', icon: '📊', label: 'Product Analytics' },
-  { id: 'combos', icon: '🎯', label: 'Smart Combos' },
-  { id: 'manage', icon: '📋', label: 'Manage Combos' },
-  { id: 'suggest', icon: '💡', label: 'Upsell Suggest' },
+  { id: 'products', label: 'Analytics' },
+  { id: 'combos', label: 'Combos' },
+  { id: 'manage', label: 'Manage' },
+  { id: 'suggest', label: 'Upsell' },
 ]
 
 function App() {
@@ -19,13 +19,10 @@ function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
-        <div className="sidebar-logo">
-          <div className="logo-icon">🍽️</div>
-          <h1>
-            MinedAI
-            <span>Revenue Intelligence</span>
-          </h1>
+      <header className="topbar">
+        <div className="topbar-brand">
+          <div className="brand-mark">P</div>
+          <h1>PetPooja<span>Revenue Intelligence</span></h1>
         </div>
         <nav className="nav-items">
           {NAV_ITEMS.map(item => (
@@ -34,12 +31,11 @@ function App() {
               className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
               onClick={() => setActiveTab(item.id)}
             >
-              <span className="nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
+              {item.label}
             </button>
           ))}
         </nav>
-      </aside>
+      </header>
 
       <main className="main-content">
         {activeTab === 'products' && <ProductAnalytics apiBase={API_BASE} />}

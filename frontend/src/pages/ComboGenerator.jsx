@@ -71,7 +71,7 @@ export default function ComboGenerator({ apiBase }) {
             const result = await res.json()
             if (result.success) {
                 setSavedIds(prev => new Set([...prev, modalCombo._idx]))
-                showToast(`"${modalCombo.combo_name}" saved to database!`)
+                showToast(`"${modalCombo.combo_name}" saved to database`)
                 setModalCombo(null)
             } else {
                 showToast(result.message || 'Failed to save', 'error')
@@ -82,16 +82,16 @@ export default function ComboGenerator({ apiBase }) {
         setSaving(false)
     }
 
-    if (loading) return <div className="loading"><div className="spinner"></div><p>Generating smart combos from orders…</p></div>
-    if (!data?.success) return <div className="empty-state"><div className="empty-icon">📭</div><p>Failed to generate combos</p></div>
+    if (loading) return <div className="loading"><div className="spinner"></div><p>Generating combos from order data...</p></div>
+    if (!data?.success) return <div className="empty-state"><p>Failed to generate combos</p></div>
 
     const cls = data.product_classifications
 
     return (
         <>
             <div className="page-header">
-                <h2>🎯 Smart Combo Generator</h2>
-                <p>AI-generated combos from {data.total_orders_analyzed} orders across {data.total_products} products</p>
+                <h2>Combo Generator</h2>
+                <p>Generated from {data.total_orders_analyzed} orders across {data.total_products} products</p>
             </div>
 
             <div className="stats-row">
@@ -101,17 +101,17 @@ export default function ComboGenerator({ apiBase }) {
                 </div>
                 <div className="stat-card">
                     <div className="stat-label">Combos Generated</div>
-                    <div className="stat-value" style={{ color: 'var(--accent-light)' }}>{data.combos_generated}</div>
+                    <div className="stat-value">{data.combos_generated}</div>
                 </div>
                 <div className="stat-card">
-                    <div className="stat-label">⭐ Stars</div>
-                    <div className="stat-value" style={{ color: 'var(--star)' }}>{cls.stars.length}</div>
-                    <div className="stat-sub">{cls.stars.slice(0, 3).join(', ')}…</div>
+                    <div className="stat-label">Stars</div>
+                    <div className="stat-value">{cls.stars.length}</div>
+                    <div className="stat-sub">{cls.stars.slice(0, 3).join(', ')}</div>
                 </div>
                 <div className="stat-card">
-                    <div className="stat-label">💎 Hidden Gems</div>
-                    <div className="stat-value" style={{ color: 'var(--gem)' }}>{cls.hidden_gems.length}</div>
-                    <div className="stat-sub">{cls.hidden_gems.slice(0, 3).join(', ')}…</div>
+                    <div className="stat-label">Hidden Gems</div>
+                    <div className="stat-value">{cls.hidden_gems.length}</div>
+                    <div className="stat-sub">{cls.hidden_gems.slice(0, 3).join(', ')}</div>
                 </div>
             </div>
 
@@ -121,15 +121,15 @@ export default function ComboGenerator({ apiBase }) {
                         <div className="combo-rank">#{idx + 1}</div>
                         <h4>{combo.combo_name}</h4>
 
-                        <div style={{ marginBottom: 10 }}>
+                        <div style={{ marginBottom: 8 }}>
                             <span className={`strategy-tag ${combo.strategy === 'pattern_based' ? 'pattern' : 'hidden_gem'}`}>
-                                {combo.strategy === 'pattern_based' ? '📈 Pattern-Based' : '💎 Hidden Gem Boost'}
+                                {combo.strategy === 'pattern_based' ? 'Pattern-Based' : 'Hidden Gem'}
                             </span>
                         </div>
 
                         <div className="combo-items">
                             {combo.items.map((item, i) => (
-                                <span className="combo-item-tag" key={i}>{item.name} (₹{item.base_price})</span>
+                                <span className="combo-item-tag" key={i}>{item.name} ({'\u20B9'}{item.base_price})</span>
                             ))}
                         </div>
 
@@ -145,37 +145,28 @@ export default function ComboGenerator({ apiBase }) {
                             const margin = combo.combo_price - cost
                             const marginPct = combo.combo_price > 0 ? ((margin / combo.combo_price) * 100).toFixed(1) : 0
                             return (
-                                <div style={{
-                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                                    padding: '8px 12px', borderRadius: 'var(--radius-xs)',
-                                    background: marginPct >= 50 ? 'var(--success-bg)' : 'var(--star-bg)',
-                                    marginTop: 4
-                                }}>
-                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Profit Margin</span>
-                                    <span style={{
-                                        fontSize: 16, fontWeight: 800,
-                                        color: marginPct >= 50 ? 'var(--success)' : 'var(--star)'
-                                    }}>{marginPct}%</span>
+                                <div className={`margin-bar ${marginPct >= 50 ? 'high' : 'low'}`}>
+                                    <span className="margin-label">Profit Margin</span>
+                                    <span className="margin-value">{marginPct}%</span>
                                 </div>
                             )
                         })()}
 
                         <div className="combo-price-row">
                             <div>
-                                <span className="combo-original-price">₹{combo.total_selling_price}</span>
+                                <span className="combo-original-price">{'\u20B9'}{combo.total_selling_price}</span>
                                 {' '}
-                                <span className="combo-discount">-₹{combo.discount}</span>
+                                <span className="combo-discount">-{'\u20B9'}{combo.discount}</span>
                             </div>
-                            <span className="combo-final-price">₹{combo.combo_price}</span>
+                            <span className="combo-final-price">{'\u20B9'}{combo.combo_price}</span>
                         </div>
 
-                        {/* ADD BUTTON */}
-                        <div style={{ marginTop: 14 }}>
+                        <div style={{ marginTop: 12 }}>
                             {savedIds.has(idx) ? (
-                                <button className="btn-saved" disabled>✅ Saved to DB</button>
+                                <button className="btn-saved" disabled>Saved</button>
                             ) : (
                                 <button className="btn-add" onClick={() => openModal(combo, idx)}>
-                                    ➕ Add to Menu
+                                    Add to Menu
                                 </button>
                             )}
                         </div>
@@ -183,13 +174,12 @@ export default function ComboGenerator({ apiBase }) {
                 ))}
             </div>
 
-            {/* ─── MODAL ─────────────────────────────────────────── */}
             {modalCombo && (
                 <div className="modal-overlay" onClick={() => setModalCombo(null)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <h3>Add Combo to Database</h3>
-                            <button className="modal-close" onClick={() => setModalCombo(null)}>✕</button>
+                            <h3>Add Combo</h3>
+                            <button className="modal-close" onClick={() => setModalCombo(null)}>&#x2715;</button>
                         </div>
 
                         <div className="modal-body">
@@ -208,18 +198,12 @@ export default function ComboGenerator({ apiBase }) {
                                     value={modalCombo.description}
                                     onChange={e => handleFormChange('description', e.target.value)}
                                     rows={2}
-                                    style={{
-                                        width: '100%', padding: '10px 14px', borderRadius: 'var(--radius-sm)',
-                                        border: '1px solid var(--border)', background: 'var(--bg-card)',
-                                        color: 'var(--text-primary)', fontSize: '14px', fontFamily: 'inherit',
-                                        resize: 'vertical'
-                                    }}
                                 />
                             </div>
 
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label>Combo Price (₹)</label>
+                                    <label>Combo Price ({'\u20B9'})</label>
                                     <input
                                         type="number"
                                         value={modalCombo.combo_price}
@@ -227,7 +211,7 @@ export default function ComboGenerator({ apiBase }) {
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label>Original Price (₹)</label>
+                                    <label>Original Price ({'\u20B9'})</label>
                                     <input
                                         type="number"
                                         value={modalCombo.total_selling_price}
@@ -238,7 +222,7 @@ export default function ComboGenerator({ apiBase }) {
 
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label>Discount (₹)</label>
+                                    <label>Discount ({'\u20B9'})</label>
                                     <input
                                         type="number"
                                         value={modalCombo.discount}
@@ -246,7 +230,7 @@ export default function ComboGenerator({ apiBase }) {
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label>Total Cost (₹)</label>
+                                    <label>Total Cost ({'\u20B9'})</label>
                                     <input
                                         type="number"
                                         value={modalCombo.total_cost}
@@ -280,12 +264,12 @@ export default function ComboGenerator({ apiBase }) {
                             </div>
 
                             <div className="form-group">
-                                <label>Items in Combo</label>
+                                <label>Items</label>
                                 <div className="modal-items-list">
                                     {modalCombo.items.map((item, i) => (
                                         <div className="modal-item" key={i}>
                                             <span className="modal-item-name">{item.name}</span>
-                                            <span className="modal-item-price">₹{item.base_price}</span>
+                                            <span className="modal-item-price">{'\u20B9'}{item.base_price}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -295,17 +279,16 @@ export default function ComboGenerator({ apiBase }) {
                         <div className="modal-footer">
                             <button className="btn-cancel" onClick={() => setModalCombo(null)}>Cancel</button>
                             <button className="btn-save" onClick={handleSave} disabled={saving}>
-                                {saving ? 'Saving…' : '💾 Save to Database'}
+                                {saving ? 'Saving...' : 'Save Combo'}
                             </button>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* ─── TOAST ─────────────────────────────────────────── */}
             {toast && (
                 <div className={`toast toast-${toast.type}`}>
-                    {toast.type === 'success' ? '✅' : '❌'} {toast.msg}
+                    {toast.msg}
                 </div>
             )}
         </>

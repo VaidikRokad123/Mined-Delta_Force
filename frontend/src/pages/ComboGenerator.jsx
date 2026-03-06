@@ -140,12 +140,25 @@ export default function ComboGenerator({ apiBase }) {
                             {combo.lift > 0 && <div>Lift: <span className="meta-value">{combo.lift}</span></div>}
                         </div>
 
-                        <div className="score-bar">
-                            <div className="score-bar-fill" style={{
-                                width: `${combo.combo_score * 100}%`,
-                                background: `linear-gradient(90deg, var(--accent), var(--gem))`
-                            }} />
-                        </div>
+                        {(() => {
+                            const cost = combo.total_cost || combo.items?.reduce((s, it) => s + (it.base_price * 0.5), 0) || 0
+                            const margin = combo.combo_price - cost
+                            const marginPct = combo.combo_price > 0 ? ((margin / combo.combo_price) * 100).toFixed(1) : 0
+                            return (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    padding: '8px 12px', borderRadius: 'var(--radius-xs)',
+                                    background: marginPct >= 50 ? 'var(--success-bg)' : 'var(--star-bg)',
+                                    marginTop: 4
+                                }}>
+                                    <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Profit Margin</span>
+                                    <span style={{
+                                        fontSize: 16, fontWeight: 800,
+                                        color: marginPct >= 50 ? 'var(--success)' : 'var(--star)'
+                                    }}>{marginPct}%</span>
+                                </div>
+                            )
+                        })()}
 
                         <div className="combo-price-row">
                             <div>

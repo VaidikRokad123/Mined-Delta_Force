@@ -62,4 +62,13 @@ const updateProduct = async (req, res) => {
     }
 };
 
-module.exports = { addProduct, deleteProduct, updateProduct };
+const getAllProducts = async (req, res) => {
+    try {
+        const products = await Product.find().sort({ category: 1, name: 1 });
+        return res.status(200).json({ success: true, data: products });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { addProduct, deleteProduct, updateProduct, getAllProducts };

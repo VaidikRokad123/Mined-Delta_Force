@@ -206,6 +206,7 @@ exports.parseOrder = async (req, res) => {
             // Persist to Order collection
             const savedOrder = await Order.create({
                 order_id: uuidv4(),
+                session_id: sessionId,
                 order_channel: "voice",
                 items: finalOrder.items.map(i => ({
                     product_id: i.product_id,

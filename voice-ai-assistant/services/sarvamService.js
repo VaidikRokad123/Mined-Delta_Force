@@ -13,10 +13,9 @@ async function generateSpeech(text) {
             speaker: "ritu"
         });
 
-        // Sarvam returns audio in audios[0]
         return response.audios[0];
     } catch (error) {
-        console.error("❌ Sarvam TTS failed:", error);
+        console.error("❌ Sarvam TTS failed:", error.message || error);
         return null;
     }
 }

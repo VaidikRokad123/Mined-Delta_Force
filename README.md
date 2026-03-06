@@ -1,6 +1,6 @@
-# PetPooja — Revenue Intelligence Platform
+# PetPooja — AI-Powered Restaurant Revenue Intelligence Platform
 
-A full-stack restaurant analytics platform that uses **association rule mining**, **product profitability classification**, and **smart combo generation** to help restaurant owners maximise revenue, design data-driven combo meals, and surface real-time upsell recommendations.
+A full-stack restaurant management platform combining **revenue analytics**, **AI-powered ordering** (text, voice, and phone), **smart combo generation**, **dynamic pricing intelligence**, and **real-time upsell recommendations** — built for both restaurant owners and customers.
 
 ---
 
@@ -8,78 +8,191 @@ A full-stack restaurant analytics platform that uses **association rule mining**
 
 1. [Architecture Overview](#architecture-overview)
 2. [Tech Stack](#tech-stack)
-3. [Getting Started](#getting-started)
-4. [Database Models](#database-models)
-5. [API Endpoints](#api-endpoints)
-6. [Core Analytics Functions](#core-analytics-functions)
-   - [computeProductAnalytics](#1-computeproductanalytics)
-   - [computeAssociationRules](#2-computeassociationrules)
-   - [generateSmartCombos](#3-generatesmartcombos)
-   - [getComboAnalytics](#4-getcomboanalytics)
-   - [getSuggestions (Upsell Engine)](#5-getsuggestions-upsell-engine)
-7. [Helper Functions](#helper-functions)
-   - [areCuisinesCompatible](#arecuisinescompatible)
-   - [getCompatibilityScore](#getcompatibilityscore)
-8. [Equations & Scoring Formulas](#equations--scoring-formulas)
-9. [Category Compatibility Matrix](#category-compatibility-matrix)
-10. [Product Classification Matrix](#product-classification-matrix)
-11. [Frontend Pages](#frontend-pages)
-12. [CRUD Controllers](#crud-controllers)
+3. [Project Structure](#project-structure)
+4. [Getting Started](#getting-started)
+5. [Environment Variables](#environment-variables)
+6. [Database Models](#database-models)
+7. [API Endpoints](#api-endpoints)
+8. [Core Analytics Engine](#core-analytics-engine)
+   - [Product Analytics (BCG Classification)](#1-product-analytics-bcg-classification)
+   - [Association Rule Mining](#2-association-rule-mining)
+   - [Smart Combo Generator](#3-smart-combo-generator)
+   - [Combo Deep Analytics](#4-combo-deep-analytics)
+   - [Upsell Suggestion Engine](#5-upsell-suggestion-engine)
+   - [Pricing Intelligence](#6-pricing-intelligence)
+9. [Voice AI Assistant](#voice-ai-assistant)
+   - [Order Parser](#order-parser)
+   - [Menu Question AI](#menu-question-ai)
+   - [Twilio Phone Integration](#twilio-phone-integration)
+   - [Text-to-Speech (Sarvam AI)](#text-to-speech-sarvam-ai)
+10. [Owner Dashboard (Frontend)](#owner-dashboard-frontend)
+11. [User Dashboard (User Frontend)](#user-dashboard-user-frontend)
+12. [Helper Functions](#helper-functions)
+13. [Equations & Scoring Formulas](#equations--scoring-formulas)
+14. [Category Compatibility Matrix](#category-compatibility-matrix)
+15. [Product Classification Matrix](#product-classification-matrix)
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Frontend (React + Vite)                 │
-│  ┌───────────┬───────────┬───────────┬───────────┐          │
-│  │ Analytics │  Combos   │  Manage   │  Upsell   │          │
-│  │   Page    │ Generator │  Combos   │   View    │          │
-│  └─────┬─────┴─────┬─────┴─────┬─────┴─────┬─────┘          │
-│        │           │           │           │                │
-│        └───────────┴───────────┴───────────┘                │
-│                        │  REST API calls                    │
-└────────────────────────┼────────────────────────────────────┘
-                         │
-┌────────────────────────┼────────────────────────────────────┐
-│               Backend (Express.js)                          │
-│  ┌──────────────────────────────────────────┐               │
-│  │         Analytics Controller             │               │
-│  │  ┌──────────────┐  ┌─────────────────┐   │               │
-│  │  │  Product      │  │  Association    │   │               │
-│  │  │  Analytics    │  │  Rule Mining    │   │               │
-│  │  └──────┬───────┘  └───────┬─────────┘   │               │
-│  │         │                  │              │               │
-│  │  ┌──────┴──────────────────┴──────────┐   │               │
-│  │  │  Smart Combo Generator             │   │               │
-│  │  │  Upsell Suggestion Engine          │   │               │
-│  │  │  Combo Analytics                   │   │               │
-│  │  └────────────────────────────────────┘   │               │
-│  └──────────────────────────────────────────┘               │
-│                        │                                    │
-└────────────────────────┼────────────────────────────────────┘
-                         │
-              ┌──────────┴──────────┐
-              │   MongoDB Atlas     │
-              │  ┌───────────────┐  │
-              │  │  Products     │  │
-              │  │  Orders       │  │
-              │  │  Combos       │  │
-              │  └───────────────┘  │
-              └─────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                    │
+│                                                                              │
+│  ┌─────────────────────────┐         ┌──────────────────────────────────┐    │
+│  │  Owner Dashboard        │         │  User Dashboard                  │    │
+│  │  (React + Vite)         │         │  (React + Vite)                  │    │
+│  │  http://localhost:5173  │         │  http://localhost:5174           │    │
+│  ├─────────────────────────┤         ├──────────────────────────────────┤    │
+│  │ • Product Analytics     │         │ • Menu Browser                   │    │
+│  │ • Pricing Dashboard     │         │ • AI Chat Ordering               │    │
+│  │ • Combo Generator       │         │ • Voice Ordering (Web Speech)    │    │
+│  │ • Manage Combos         │         │ • Phone Ordering (Twilio)        │    │
+│  │ • Upsell Suggestions    │         │ • My Orders (Session-based)      │    │
+│  │ • Order Management      │         │                                  │    │
+│  └────────┬────────────────┘         └────────┬───────────┬─────────────┘    │
+│           │                                   │           │                  │
+└───────────┼───────────────────────────────────┼───────────┼──────────────────┘
+            │ REST API                          │           │ /parse-order
+            │                                   │           │ /tts
+┌───────────▼───────────────────┐    ┌──────────▼───────────▼──────────────────┐
+│   Backend API Server          │    │   Voice AI Assistant                    │
+│   (Express.js)                │    │   (Express.js)                          │
+│   http://localhost:3001       │    │   http://localhost:3002                 │
+│                               │    │                                         │
+│   • Product CRUD              │    │   • Order Parsing (Fuse.js fuzzy match) │
+│   • Order CRUD                │    │   • Session Management (MongoDB)        │
+│   • Combo CRUD                │    │   • AI Menu Q&A (LLama 3 70B)           │
+│   • Analytics Engine          │    │   • TTS (Sarvam AI bulbul:v3)           │
+│   • Pricing Recommendations   │    │   • Twilio Voice Webhooks               │
+│   • Association Mining        │    │                                         │
+└───────────┬───────────────────┘    └──────┬───────────────┬──────────────────┘
+            │                               │               │
+            └───────────┬───────────────────┘               │
+                        │                                   │
+             ┌──────────▼──────────┐             ┌──────────▼───────────────┐
+             │   MongoDB Atlas     │             │   External AI Services   │
+             │                     │             │                          │
+             │   • Products        │             │   • HuggingFace          │
+             │   • Orders          │             │     (LLama 3 70B)        │
+             │   • Combos          │             │   • LM Studio (fallback) │
+             │   • Sessions        │             │   • Sarvam AI (TTS)      │
+             └─────────────────────┘             │   • Twilio (Phone)       │
+                                                 └──────────────────────────┘
 ```
 
 ---
 
 ## Tech Stack
 
-| Layer      | Technology                          |
-|------------|-------------------------------------|
-| Frontend   | React 19, Vite 7, CSS3              |
-| Backend    | Node.js, Express.js                 |
-| Database   | MongoDB Atlas (Mongoose ODM)        |
-| Analytics  | Custom association mining engine     |
+| Layer               | Technology                                          |
+|---------------------|-----------------------------------------------------|
+| Owner Frontend      | React 19, Vite 7, CSS3, DM Sans + JetBrains Mono    |
+| User Frontend       | React 19, Vite 7, CSS3, Web Speech API              |
+| Backend API         | Node.js, Express 5, Mongoose 9                      |
+| Voice AI Server     | Node.js, Express 5, Fuse.js 7, uuid                 |
+| Database            | MongoDB Atlas (Mongoose ODM)                        |
+| AI / NLP            | Meta-LLama 3 70B (HuggingFace), LM Studio (local)   |
+| Text-to-Speech      | Sarvam AI (bulbul:v3, speaker: ritu, en-IN)         |
+| Phone Integration   | Twilio Voice (TwiML, Speech-to-Text)                |
+| Analytics           | Custom association rule mining, BCG classification  |
+
+---
+
+## Project Structure
+
+```
+hackamined/
+├── README.md
+├── aimodel/
+│   └── t.py                              # Placeholder for offline ML model
+│
+├── backend/                               # REST API Server (Port 3001)
+│   ├── index.js                           # Entry point — connects DB, starts server
+│   ├── package.json
+│   ├── seed.js                            # Database seeder
+│   └── src/
+│       ├── app.js                         # Express app — CORS, routes, health check
+│       ├── config/
+│       │   └── db.js                      # MongoDB connection (MONGO_URL)
+│       ├── controllers/
+│       │   ├── analytics.controller.js    # Core analytics engine (~970 lines)
+│       │   ├── combo.controller.js        # Combo CRUD operations
+│       │   ├── order.controller.js        # Order CRUD + session-based queries
+│       │   └── product.controller.js      # Product CRUD + pricing application
+│       ├── models/
+│       │   ├── combo.model.js             # Combo schema (items, scores, pricing)
+│       │   ├── order.model.js             # Order schema (items, combos, session_id)
+│       │   └── product.model.js           # Product schema (pricing intelligence fields)
+│       └── routes/
+│           ├── combo.route.js             # /api/combo/* (CRUD + analytics)
+│           ├── order.route.js             # /api/order/* (CRUD + session filter)
+│           └── product.route.js           # /api/product/* (CRUD + pricing)
+│
+├── frontend/                              # Owner Dashboard (Port 5173)
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   └── src/
+│       ├── App.jsx                        # Tab navigation (6 tabs)
+│       ├── index.css                      # Design system — DM Sans + JetBrains Mono
+│       ├── main.jsx
+│       └── pages/
+│           ├── ProductAnalytics.jsx       # BCG quadrant classification view
+│           ├── PricingDashboard.jsx       # Dynamic pricing recommendations
+│           ├── ComboGenerator.jsx         # AI combo generation + save to DB
+│           ├── ManageCombos.jsx           # Manage saved combos + deep analytics
+│           ├── SuggestView.jsx            # Upsell suggestion engine
+│           └── Orders.jsx                 # Order management (CRUD table)
+│
+├── user-frontend/                         # User Dashboard (Port 5174)
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js                     # Dev server port: 5174
+│   └── src/
+│       ├── App.jsx                        # Tab navigation (5 tabs) + session management
+│       ├── index.css                      # Design system — matches owner dashboard
+│       ├── main.jsx
+│       └── pages/
+│           ├── Menu.jsx                   # Browse products & combos (category filter)
+│           ├── ChatOrder.jsx              # AI text-based ordering via /parse-order
+│           ├── VoiceOrder.jsx             # Voice ordering (Web Speech API + Sarvam TTS)
+│           ├── CallOrder.jsx              # Phone ordering (Twilio call link)
+│           └── MyOrders.jsx               # Order history by session ID
+│
+├── voice-ai-assistant/                    # Voice AI Server (Port 3002)
+│   ├── server.js                          # Entry point — Express, CORS, routes, /tts
+│   ├── package.json
+│   ├── probe-lm.js                        # LM Studio connectivity probe
+│   ├── test-sarvam.js                     # Sarvam TTS test script
+│   ├── ai/
+│   │   └── menuAssistantAI.js             # LLama 3 70B menu Q&A (HuggingFace)
+│   ├── controllers/
+│   │   ├── orderController.js             # Core order parser (~900 lines)
+│   │   └── twilioController.js            # Twilio voice call webhooks
+│   ├── models/
+│   │   ├── combo.model.js                 # Combo schema (synced with backend)
+│   │   ├── order.model.js                 # Order schema (synced with backend)
+│   │   ├── product.model.js               # Product schema (synced with backend)
+│   │   └── session.model.js               # Session state (current_order, upsell, clarification)
+│   ├── routes/
+│   │   ├── orderRoutes.js                 # POST /parse-order
+│   │   └── twilioRoutes.js                # POST /twilio/voice, /gather, /status
+│   ├── services/
+│   │   ├── aiOrderParser.js               # LM Studio local model parser (fallback)
+│   │   ├── aiParserService.js             # HuggingFace LLama 3 70B parser (primary)
+│   │   └── sarvamService.js               # Sarvam AI TTS (bulbul:v3, en-IN)
+│   ├── utils/
+│   │   └── isQuestion.js                  # Question vs. order intent classifier
+│   └── public/
+│       └── audio/                         # Generated TTS audio files
+│
+└── voice-ui/                              # Legacy voice UI prototypes (static HTML)
+    ├── index.html                         # Basic voice assistant
+    ├── index2.html                        # Styled dark theme variant
+    └── index3.html                        # Full session-persistent variant
+```
 
 ---
 
@@ -89,37 +202,101 @@ A full-stack restaurant analytics platform that uses **association rule mining**
 
 - Node.js v18+
 - MongoDB Atlas cluster (or local MongoDB)
+- HuggingFace API key (for LLama 3 70B)
+- Sarvam AI API key (for Text-to-Speech)
+- Twilio account (for phone ordering)
+- (Optional) LM Studio running locally on port 1234
 
-### 1. Backend
+### 1. Backend API Server
 
 ```bash
 cd backend
 npm install
 ```
 
-Create a `.env` file:
-
-```
-MONGO_URL=mongodb+srv://<user>:<pass>@cluster.mongodb.net/<dbname>
-PORT=3001
-GEMINI_API_KEY=<your-key>
-```
-
-Start the server:
+Create a `.env` file (see [Environment Variables](#environment-variables)), then:
 
 ```bash
 node index.js
+# Server starts on http://localhost:3001
 ```
 
-### 2. Frontend
+To seed the database with sample products and orders:
+
+```bash
+node seed.js
+```
+
+### 2. Owner Dashboard
 
 ```bash
 cd frontend
 npm install
 npm run dev
+# Opens on http://localhost:5173
 ```
 
-The frontend runs on `http://localhost:5173` and calls the backend at `http://localhost:3001/api`.
+### 3. User Dashboard
+
+```bash
+cd user-frontend
+npm install
+npm run dev
+# Opens on http://localhost:5174
+```
+
+### 4. Voice AI Assistant
+
+```bash
+cd voice-ai-assistant
+npm install
+```
+
+Create a `.env` file (see [Environment Variables](#environment-variables)), then:
+
+```bash
+node server.js
+# Server starts on http://localhost:3002
+```
+
+### 5. Twilio Setup (for phone ordering)
+
+1. Create a Twilio account and get a phone number
+2. Set up ngrok to tunnel your local port 3002: `ngrok http 3002`
+3. Configure your Twilio phone number's Voice webhook to: `https://<ngrok-url>/twilio/voice`
+4. Set `TWILIO_NGROK_URL` in `.env` to the ngrok URL
+
+---
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+```env
+MONGO_URL=mongodb+srv://<user>:<pass>@cluster.mongodb.net/<dbname>
+PORT=3001
+```
+
+### Voice AI Assistant (`voice-ai-assistant/.env`)
+
+```env
+MONGO_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/<dbname>
+PORT=3002
+
+# AI APIs
+HF_API_KEY=hf_...                          # HuggingFace API key (LLama 3 70B)
+SARVAM_API_KEY=...                          # Sarvam AI TTS key
+
+# Twilio (phone ordering)
+TWILIO_ACCOUNT_SID=AC...
+TWILIO_AUTH_TOKEN=...
+TWILIO_PHONE_NUMBER=+14302491367
+TWILIO_NGROK_URL=https://...               # Ngrok tunnel URL for webhooks
+
+# Optional
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/credentials.json   # Google Cloud Speech
+TELEGRAM_BOT_TOKEN=...                     # Telegram bot integration
+```
 
 ---
 
@@ -127,16 +304,19 @@ The frontend runs on `http://localhost:5173` and calls the backend at `http://lo
 
 ### Product
 
-| Field                | Type       | Description                                       |
-|----------------------|------------|---------------------------------------------------|
-| `name`               | String     | Product name (required)                           |
-| `category`           | Enum       | `main`, `snack`, `dessert`, `beverages` (required)|
-| `selling_price`      | Number     | Menu price shown to customer (required)           |
-| `cost`               | Number     | Raw cost to produce the item (required)           |
-| `description`        | String     | Optional product description                     |
-| `recommendation_score`| Number    | Algorithm-generated recommendation score          |
-| `rating`             | Number     | Average customer rating                           |
-| `modifiers`          | Array      | Add-on options (e.g. size, extra cheese)          |
+| Field                 | Type       | Description                                                    |
+|-----------------------|------------|----------------------------------------------------------------|
+| `name`                | String     | Product name (required)                                        |
+| `category`            | Enum       | `main`, `snack`, `dessert`, `beverages` (required)             |
+| `selling_price`       | Number     | Menu price shown to customer (required)                        |
+| `cost`                | Number     | Raw cost to produce the item (required)                        |
+| `description`         | String     | Optional product description                                  |
+| `recommendation_score`| Number     | Algorithm-generated recommendation score                       |
+| `rating`              | Number     | Average customer rating                                        |
+| `modifiers`           | Array      | Add-on options (e.g. size, extra cheese) with `name` + `options[{value, extra_price}]` |
+| `suggested_price`     | Number     | Analytics-recommended price (set by owner via Pricing Dashboard) |
+| `max_discount_pct`    | Number     | Maximum safe discount % without dropping below 20% margin       |
+| `min_price`           | Number     | Floor price = `cost / (1 - 0.20)` — absolute minimum            |
 
 **Indexes:** `{ category: 1 }`
 
@@ -144,71 +324,107 @@ The frontend runs on `http://localhost:5173` and calls the backend at `http://lo
 
 | Field           | Type       | Description                                        |
 |-----------------|------------|----------------------------------------------------|
-| `order_id`      | String     | Unique order identifier (required, unique)         |
+| `order_id`      | String     | Unique UUID identifier (required, unique)          |
+| `session_id`    | String     | User session ID for filtering (nullable)           |
 | `order_channel` | Enum       | `voice`, `app`, `counter` (required)               |
-| `items`         | Array      | List of ordered products with quantity & price      |
-| `combos`        | Array      | List of ordered combos                             |
+| `items`         | Array      | `[{product_id, name, quantity, base_price, selected_modifiers}]` |
+| `combos`        | Array      | `[{combo_id, combo_name, quantity, combo_price}]`  |
 | `total_items`   | Number     | Total number of items in the order                 |
 | `total_price`   | Number     | Sum of all item prices before discount             |
 | `discount`      | Number     | Discount applied                                   |
 | `final_price`   | Number     | Amount charged to customer                         |
+| `order_score`   | Number     | Quality score of the order                         |
+| `rating`        | Number     | Customer rating                                    |
 
-**Indexes:** `{ "items.product_id": 1 }`
+**Indexes:** `{ "items.product_id": 1 }`, `{ session_id: 1 }`
 
 ### Combo
 
 | Field                | Type       | Description                                       |
 |----------------------|------------|---------------------------------------------------|
 | `combo_name`         | String     | Display name for the combo (required)             |
-| `description`        | String     | Auto-generated reasoning                          |
-| `items`              | Array      | Products in the combo (product_id, name, qty, price)|
+| `description`        | String     | Auto-generated reasoning (default: "")            |
+| `items`              | Array      | `[{product_id, name, quantity, base_price}]`      |
 | `total_selling_price`| Number     | Sum of individual item prices (required)          |
 | `combo_price`        | Number     | Discounted combo price (required)                 |
 | `discount`           | Number     | Absolute discount amount                          |
 | `total_cost`         | Number     | Sum of item costs                                 |
 | `support`            | Number     | Association rule support value                    |
 | `confidence`         | Number     | Association rule confidence value                 |
-| `combo_score`        | Number     | Weighted composite score                          |
+| `combo_score`        | Number     | Weighted composite score (0.4×confidence + 0.3×profit + 0.3×demand) |
 | `rating`             | Number     | Customer rating                                   |
 
 **Indexes:** `{ "items.product_id": 1 }`, `{ combo_score: -1 }`
+
+### Session (Voice AI)
+
+| Field                   | Type       | Description                                       |
+|-------------------------|------------|---------------------------------------------------|
+| `session_id`            | String     | Unique session identifier (from device/phone)     |
+| `current_order`         | Object     | `{items: [...], combos: [...]}`                    |
+| `last_upsell`           | Object     | Pending upsell `{combo_id, combo_name, combo_price}` or null |
+| `pending_clarification` | Array      | Ambiguous product options `[{product_id, name, base_price}]` or null |
+| `last_question`         | String     | Last menu question asked (for context)             |
+| `status`                | String     | Session status (default: "ordering")               |
 
 ---
 
 ## API Endpoints
 
-### Products
+### Products — `/api/product`
 
-| Method | Endpoint             | Description        |
-|--------|----------------------|--------------------|
-| POST   | `/api/product/add`   | Add a new product  |
+| Method | Endpoint       | Description                                  |
+|--------|----------------|----------------------------------------------|
+| GET    | `/all`         | Get all products (sorted by category, name)  |
+| POST   | `/add`         | Add a new product                            |
+| PUT    | `/:id`         | Update product details                       |
+| PUT    | `/:id/pricing` | Apply pricing recommendation (from analytics)|
+| DELETE | `/:id`         | Delete a product                             |
 
-### Orders
+### Orders — `/api/order`
 
-| Method | Endpoint           | Description       |
-|--------|--------------------|--------------------|
-| POST   | `/api/order/add`   | Add a new order   |
+| Method | Endpoint              | Description                          |
+|--------|-----------------------|--------------------------------------|
+| GET    | `/`                   | Get all orders (newest first)        |
+| GET    | `/session/:sessionId` | Get orders for a specific user session |
+| POST   | `/add`                | Create a new order                   |
+| PUT    | `/:id`                | Update order (price, discount, etc.) |
+| DELETE | `/:id`                | Delete an order                      |
 
-### Combos & Analytics
+### Combos & Analytics — `/api/combo`
 
-| Method | Endpoint                           | Description                                      |
-|--------|------------------------------------|--------------------------------------------------|
-| POST   | `/api/combo/add`                   | Save a generated combo to DB                     |
-| GET    | `/api/combo/all`                   | Get all saved combos (sorted by score desc)      |
-| DELETE | `/api/combo/:id`                   | Delete a saved combo                             |
-| GET    | `/api/combo/generate`              | Generate smart combos from order data            |
-| GET    | `/api/combo/suggest/:productId`    | Get upsell suggestions for a specific product    |
-| GET    | `/api/combo/analytics/combo/:comboId` | Deep analytics for a specific saved combo     |
-| GET    | `/api/combo/analytics/products`    | Get profitability analytics for all products     |
-| GET    | `/api/combo/analytics/associations`| Get all association rules from order data         |
+| Method | Endpoint                          | Description                                      |
+|--------|-----------------------------------|--------------------------------------------------|
+| POST   | `/add`                            | Save a generated combo to DB                     |
+| GET    | `/all`                            | Get all saved combos (sorted by score desc)      |
+| DELETE | `/:id`                            | Delete a saved combo                             |
+| GET    | `/generate`                       | Generate smart combos from order data            |
+| GET    | `/suggest/:productId`             | Get upsell suggestions for a specific product    |
+| GET    | `/analytics/combo/:comboId`       | Deep analytics for a specific saved combo        |
+| GET    | `/analytics/products`             | Product profitability analytics (BCG matrix)     |
+| GET    | `/analytics/associations`         | Association rules from order data                |
+| GET    | `/analytics/pricing`              | Pricing recommendations per product              |
+
+### Voice AI Assistant — `http://localhost:3002`
+
+| Method | Endpoint           | Description                                  |
+|--------|--------------------|----------------------------------------------|
+| POST   | `/parse-order`     | Parse natural language text into order items  |
+| POST   | `/tts`             | Generate Text-to-Speech audio (Sarvam AI)    |
+| GET    | `/test-sarvam`     | Test Sarvam TTS with `?text=...` query param |
+| POST   | `/twilio/voice`    | Twilio incoming call webhook                 |
+| POST   | `/twilio/gather`   | Twilio speech gather result webhook          |
+| POST   | `/twilio/status`   | Twilio call status callback                  |
 
 ---
 
-## Core Analytics Functions
+## Core Analytics Engine
 
-### 1. `computeProductAnalytics`
+All analytics functions live in `backend/src/controllers/analytics.controller.js` (~970 lines).
 
-**Purpose:** Analyses every product in the database by computing profitability metrics and classifying each product into one of four strategic quadrants.
+### 1. Product Analytics (BCG Classification)
+
+**Purpose:** Analyses every product by computing profitability metrics and classifying into one of four strategic quadrants.
 
 **Data Sources:** `Product` collection + `Order` collection
 
@@ -221,237 +437,336 @@ The frontend runs on `http://localhost:5173` and calls the backend at `http://lo
 
 2. **Compute per-product metrics:**
 
-   **Margin (absolute):**
+   $$\text{Margin} = \text{sellingPrice} - \text{cost}$$
 
-   $$Margin = sellingPrice - cost$$
-
-   **Margin Percentage:**
-
-   $$Margin\% = \frac{sellingPrice - cost}{sellingPrice} \times 100$$
-
-   **Order Frequency** — how often the product appears across orders:
+   $$\text{Margin\%} = \frac{\text{sellingPrice} - \text{cost}}{\text{sellingPrice}} \times 100$$
 
    $$\text{Order Frequency} = \frac{\text{orderCount}}{\text{totalOrders}}$$
 
-   **Revenue Share** — the product's contribution to total revenue:
+   $$\text{Revenue Share} = \frac{\text{productRevenue}}{\text{totalRevenue}} \times 100$$
 
-   $$RevenueShare = \frac{productRevenue}{totalRevenue} \times 100$$
+3. **Classify** into BCG-inspired matrix (see [Product Classification Matrix](#product-classification-matrix)).
 
-3. **Classify** into the BCG-inspired profitability matrix (see [Product Classification Matrix](#product-classification-matrix)).
-
-**Output:** Array of product analytics objects with `margin`, `margin_pct`, `units_sold`, `order_frequency`, `revenue_share`, and `classification`.
+**Output:** Array of product analytics with `margin`, `margin_pct`, `units_sold`, `order_frequency`, `revenue_share`, and `classification`.
 
 ---
 
-### 2. `computeAssociationRules`
+### 2. Association Rule Mining
 
-**Purpose:** Mines order history to discover which products are frequently bought together using association rule mining (Apriori-style pairwise analysis).
+**Purpose:** Mines order history to discover which products are frequently bought together (Apriori-style pairwise analysis).
 
-**Process:**
+**Metrics computed per product pair:**
 
-1. **Count single-item frequency** — for each product, how many orders contain it:
+**Support** — fraction of all orders containing both items:
 
-   $$\text{freq}(A) = \text{number of orders containing product A}$$
+$$\text{Support}(A, B) = \frac{\text{pairFreq}(A, B)}{\text{totalOrders}}$$
 
-2. **Count pairwise co-occurrence** — for every unique pair of products in each order:
+**Confidence** — conditional purchase probability (max of both directions):
 
-   $$\text{pairFreq}(A, B) = \text{number of orders containing both A and B}$$
+$$\text{Confidence} = \max\left(\frac{\text{pairFreq}(A, B)}{\text{freq}(A)},\ \frac{\text{pairFreq}(A, B)}{\text{freq}(B)}\right)$$
 
-3. **Compute three association metrics** for each pair:
+**Lift** — how much more likely the pair is bought together vs. random chance:
 
-   **Support** — the fraction of all orders that contain both items:
+$$\text{Lift}(A, B) = \frac{\text{Support}(A,B)}{P(A) \times P(B)}$$
 
-   $$\text{Support}(A, B) = \frac{\text{pairFreq}(A, B)}{\text{totalOrders}}$$
+> Lift > 1.0 → positive association, Lift = 1.0 → independent, Lift < 1.0 → negative association
 
-   > Support tells us how commonly this pair occurs overall. A support of 0.10 means 10% of all orders contain both items.
-
-   **Confidence** — given one item was purchased, the probability the other was also purchased:
-
-   $$\text{Confidence}(A \rightarrow B) = \frac{\text{pairFreq}(A, B)}{\text{freq}(A)}$$
-
-   $$\text{Confidence}(B \rightarrow A) = \frac{\text{pairFreq}(A, B)}{\text{freq}(B)}$$
-
-   The system takes the **maximum** of both directions:
-
-   $$\text{Confidence} = \max\bigl(\text{Conf}(A \rightarrow B),\ \text{Conf}(B \rightarrow A)\bigr)$$
-
-   > Confidence of 0.60 means "60% of buyers of item A also buy item B" (or vice versa, whichever is higher).
-
-   **Lift** — how much more likely the pair is bought together compared to random chance:
-
-   $$\text{Lift}(A, B) = \frac{\text{Support}(A, B)}{P(A) \times P(B)} = \frac{\text{pairFreq}(A,B) / \text{totalOrders}}{(\text{freq}(A)/\text{totalOrders}) \times (\text{freq}(B)/\text{totalOrders})}$$
-
-   > - Lift > 1.0 → products are bought together **more** than expected by chance
-   > - Lift = 1.0 → products are independent (no association)
-   > - Lift < 1.0 → products are bought together **less** than expected (negative association)
-
-4. **Filter:** Only pairs with `support >= 0.02` are kept (at least 2% of orders).
-
-5. **Sort** by lift descending (strongest associations first).
+**Filter:** Only pairs with `support >= 0.02` are kept. Sorted by lift descending.
 
 ---
 
-### 3. `generateSmartCombos`
+### 3. Smart Combo Generator
 
-**Purpose:** Automatically generates profitable combo meal suggestions using two complementary strategies, then scores, deduplicates, and ranks them.
+**Purpose:** Automatically generates profitable combo meal suggestions using two strategies, then scores, deduplicates, and ranks them.
 
 #### Strategy 1: Pattern-Based Combos
 
-Uses association rules to build combos from products that customers already buy together.
+Uses association rules to build combos from products customers already buy together.
 
-**Filter criteria:**
-- `confidence >= 0.3` (at least 30% co-purchase rate)
-- `lift >= 1.0` (positive association)
-- `compatibility_score >= 0.4` (culinary compatibility check)
+**Filter criteria:** `confidence >= 0.3`, `lift >= 1.0`, `compatibility_score >= 0.4`
 
-**Beverage auto-addition:** If neither item in the pair is a beverage, the most frequently ordered beverage is added to the combo.
+**Auto-adds** a beverage if neither item in the pair is a beverage.
 
-**Discount:** 10% off the total selling price:
+**Discount:** Averages `max_discount_pct` from products (falls back to 10%), capped at 15%.
 
-$$\text{discountAmt} = \lfloor \text{totalSelling} \times 0.10 \rfloor$$
-
-$$\text{comboPrice} = \text{totalSelling} - \text{discountAmt}$$
-
-**Profit Margin:**
-
-$$\text{profitMargin} = \frac{\text{comboPrice} - \text{totalCost}}{\text{comboPrice}}$$
-
-**Combo Score (Pattern-Based):**
-
-$$\text{ComboScore} = 0.30 \times \text{associationScore} + 0.25 \times \text{profitScore} + 0.20 \times \text{strategicBoost} + 0.15 \times \text{compatScore} + 0.10 \times \text{diversityBonus}$$
-
-Where each component is:
-
-| Component          | Formula                                                                 | Range  | Weight |
-|--------------------|-------------------------------------------------------------------------|--------|--------|
-| **associationScore** | $\min\bigl(1,\ \frac{\text{lift}}{3} \times \text{confidence}\bigr)$  | 0 – 1  | 0.30   |
-| **profitScore**      | $\min(1,\ \text{profitMargin})$                                       | 0 – 1  | 0.25   |
-| **strategicBoost**   | 1.0 if combo contains a hidden gem, else 0.4                          | 0.4 / 1| 0.20   |
-| **compatScore**      | Output of `getCompatibilityScore()` (see [Helper Functions](#helper-functions)) | 0 – 1 | 0.15 |
-| **diversityBonus**   | 1.0 if ≥ 3 categories, 0.6 if 2 categories, 0.2 if 1 category        | 0.2 – 1| 0.10   |
+$$\text{comboPrice} = \text{totalSelling} - \lfloor \text{totalSelling} \times \text{discountRate} \rfloor$$
 
 #### Strategy 2: Hidden Gem Boost Combos
 
-Pairs high-margin, low-frequency products ("hidden gems") with popular, high-margin products ("stars") to increase the hidden gem's visibility.
+Pairs high-margin low-frequency products ("hidden gems") with popular high-margin products ("stars") to increase visibility.
 
-**Selection logic:**
-- Pick each hidden gem product
-- Pair it with each star product from a **different** category
-- Add the highest-margin beverage if neither is a beverage
-- Require `compatibility_score >= 0.5`
+**Discount:** Averages `max_discount_pct` (falls back to 12%), capped at 20%.
 
-**Discount:** 12% off the total selling price:
+#### Combo Score
 
-$$\text{discountAmt} = \lfloor \text{totalSelling} \times 0.12 \rfloor$$
+$$\text{ComboScore} = 0.30 \times A + 0.25 \times P + 0.20 \times S + 0.15 \times C + 0.10 \times D$$
 
-**Combo Score (Hidden Gem Boost):**
+| Component          | Description                                                        | Weight |
+|--------------------|--------------------------------------------------------------------|--------|
+| **A** (Association)| $\min(1, \frac{\text{lift}}{3} \times \text{confidence})$         | 0.30   |
+| **P** (Profit)     | $\min(1, \text{profitMargin})$                                    | 0.25   |
+| **S** (Strategic)  | 1.0 if combo contains a hidden gem, else 0.4                      | 0.20   |
+| **C** (Compat)     | Output of `getCompatibilityScore()`                                | 0.15   |
+| **D** (Diversity)  | 1.0 if ≥3 categories, 0.6 if 2, 0.2 if 1                         | 0.10   |
 
-$$\text{ComboScore} = 0.30 \times 0.3 + 0.25 \times \min(1, \text{profitMargin}) + 0.20 \times 1.0 + 0.15 \times \text{compatScore} + 0.10 \times \text{diversityBonus}$$
-
-> Note: The association component is fixed at 0.3 (no order-history data for this pair), and the strategic boost is always 1.0 (always contains a hidden gem).
-
-#### Final Output
-
-- Deduplicate by product set (sorted product IDs)
-- Sort all candidates by `combo_score` descending
-- Return the **top 15** combos
+**Output:** Top 15 combos ranked by score.
 
 ---
 
-### 4. `getComboAnalytics`
-
-**Purpose:** Provides deep-dive analytics for a single saved combo, including profitability breakdown, per-item performance, and pairwise buying pattern analysis.
+### 4. Combo Deep Analytics
 
 **Endpoint:** `GET /api/combo/analytics/combo/:comboId`
 
 **Computed Metrics:**
 
-**Combo Margin:**
+$$\text{comboMarginPct} = \frac{\text{comboPrice} - \text{totalCost}}{\text{comboPrice}} \times 100$$
 
-$$comboMargin = comboPrice - \sum(itemCosts)$$
+$$\text{savingsPct} = \frac{\text{totalSelling} - \text{comboPrice}}{\text{totalSelling}} \times 100$$
 
-$$comboMarginPct = \frac{comboMargin}{comboPrice} \times 100$$
-
-**Customer Savings:**
-
-$$savings = totalSellingPrice - comboPrice$$
-
-$$savingsPct = \frac{savings}{totalSellingPrice} \times 100$$
-
-**Full Combo Order Rate** — how often all combo items appear together naturally in orders:
-
-$$\text{fullComboRate} = \frac{\text{orders containing ALL combo items}}{\text{totalOrders}} \times 100$$
+$$\text{fullComboRate} = \frac{\text{ordersWithAllItems}}{\text{totalOrders}} \times 100$$
 
 **Pairwise Affinity Labels:**
 
-| Affinity Level | Criteria                                                  |
-|----------------|-----------------------------------------------------------|
-| Very Strong    | `lift >= 2.5` AND `max(confAB, confBA) >= 0.4`           |
-| Strong         | `lift >= 1.5` AND `max(confAB, confBA) >= 0.3`           |
-| Moderate       | `lift >= 1.0`                                             |
-| Weak           | Everything else                                           |
+| Affinity Level | Criteria                                        |
+|----------------|-------------------------------------------------|
+| Very Strong    | `lift >= 2.5` AND `max(confAB, confBA) >= 0.4` |
+| Strong         | `lift >= 1.5` AND `max(confAB, confBA) >= 0.3` |
+| Moderate       | `lift >= 1.0`                                   |
+| Weak           | Everything else                                 |
 
-**Output includes:**
-- `overall` — combo margin, savings, compatibility score, full-combo order count
-- `item_analytics` — per-item classification, margin, units sold, order frequency
-- `pairwise_associations` — every item pair with times bought together, confidence A→B, confidence B→A, lift, and affinity label
+**Output:** `overall` (margin, savings, compatibility), `item_analytics` (per-item BCG), `pairwise_associations` (affinity data).
 
 ---
 
-### 5. `getSuggestions` (Upsell Engine)
-
-**Purpose:** When a customer adds a specific product to their cart, this function recommends other individual items and existing combos that pair well with it, ranked by an upsell priority score.
+### 5. Upsell Suggestion Engine
 
 **Endpoint:** `GET /api/combo/suggest/:productId`
 
-**Process:**
+When a customer adds a specific product, this recommends other items and combos that pair well.
 
-1. **Find co-purchased items** from order history — scan all orders containing the target product and count co-occurrences of every other product.
+**Upsell Priority Score:**
 
-2. **Compute per-suggestion metrics:**
+$$\text{UpsellScore} = 0.40 \times \text{confidence} + 0.25 \times \min(1, \text{marginPct}) + 0.20 \times \text{compatScore} + 0.15 \times \min\left(1, \frac{\text{lift}}{2}\right)$$
 
-   **Confidence:**
+**Insight Tags:** Strong Pattern, Moderate Pattern, Strong Affinity, Above Average, High Margin, Good Margin, Low Margin.
 
-   $$\text{Confidence} = \frac{\text{coOccurrence}(target, other)}{\text{ordersContainingTarget}}$$
+**Output:** Top 10 individual suggestions + all matching saved combos.
 
-   **Lift:**
+---
 
-   $$\text{Lift} = \frac{\text{coOccurrence} / \text{totalOrders}}{(\text{targetOrders}/\text{totalOrders}) \times (\text{otherFreq}/\text{totalOrders})}$$
+### 6. Pricing Intelligence
 
-   **Compatibility Score:**
+**Endpoint:** `GET /api/combo/analytics/pricing`
 
-   $$\text{compatScore} = \begin{cases} \text{COMPATIBILITY}[catA][catB] & \text{if cuisines are compatible} \\ \text{COMPATIBILITY}[catA][catB] \times 0.3 & \text{if cross-cuisine} \end{cases}$$
+**Min Acceptable Margin:** 30% (hard floor)
 
-   Items with `compatScore < 0.4` are filtered out.
+**Demand Score:**
 
-   **Margin Percentage:**
+$$\text{demandScore} = \min(100,\ \text{orderFrequency} \times 100 \times 2)$$
 
-   $$marginPct = \frac{sellingPrice - cost}{sellingPrice}$$
+**Price Adjustments by Quadrant:**
 
-3. **Upsell Priority Score:**
+| Quadrant      | Price Adjustment Range | Max Discount | Strategy                      |
+|---------------|------------------------|--------------|-------------------------------|
+| **Star**      | +2% to +14%           | 8%           | Increase price (high demand)  |
+| **Hidden Gem**| −15% to 0%            | 25%          | Decrease price (boost demand) |
+| **Volume Trap**| +5% to +15%          | 3%           | Increase price (recover margin)|
+| **Dog**       | −8% to 0%             | 15%          | Decrease or flag for removal  |
 
-   $$\text{UpsellScore} = 0.40 \times \text{confidence} + 0.25 \times \min(1, \text{marginPct}) + 0.20 \times \text{compatScore} + 0.15 \times \min\bigl(1, \frac{\text{lift}}{2}\bigr)$$
+**Apply Pricing:** `PUT /api/product/:id/pricing` persists `selling_price`, `suggested_price`, `max_discount_pct`, `min_price` to the product.
 
-   | Component       | Weight | Rationale                                                 |
-   |-----------------|--------|-----------------------------------------------------------|
-   | Confidence      | 0.40   | How strongly this item is associated with the target      |
-   | Margin          | 0.25   | Profitability — prefer high-margin upsells                |
-   | Compatibility   | 0.20   | Culinary pairing quality                                  |
-   | Lift (normed)   | 0.15   | Statistical strength of the buying affinity               |
+---
 
-4. **Generate human-readable insights** with tags:
+## Voice AI Assistant
 
-   | Insight Tag      | Trigger                    |
-   |------------------|----------------------------|
-   | Strong Pattern   | `confidence >= 0.5`        |
-   | Moderate Pattern | `confidence >= 0.3`        |
-   | Strong Affinity  | `lift > 2.0`               |
-   | Above Average    | `lift > 1.2`               |
-   | High Margin      | `marginPct >= 70%`         |
-   | Good Margin      | `marginPct >= 50%`         |
-   | Low Margin       | `marginPct < 50%`          |
+The Voice AI Assistant (`voice-ai-assistant/`) is a standalone Express server that powers all AI ordering channels — text chat, browser voice, and phone calls.
 
-5. **Return top 10** individual suggestions + all matching saved combos containing the product.
+### Order Parser
+
+**Endpoint:** `POST /parse-order`
+
+**Request:** `{ "text": "give me 2 burgers and a coke", "sessionId": "uuid" }`
+
+The order parser processes user input through a priority-based pipeline:
+
+```
+Input Text
+    │
+    ├─→ 1. Is it a menu question? → Route to Menu AI (LLama 3 70B)
+    │
+    ├─→ 2. Is it a confirmation? → Save order to DB, return order_id + total
+    │       ("confirm", "place order", "done", "finish", "that's all")
+    │
+    ├─→ 3. Is it an upsell response? → "yes" adds combo, "no" dismisses
+    │
+    ├─→ 4. Is it a clarification pick? → Resolve ambiguous product selection
+    │
+    ├─→ 5. Is it a quantity change? → Modify existing order items
+    │       ("increase", "add more", "remove", "delete", "set to")
+    │
+    └─→ 6. New item addition → Fuzzy match with Fuse.js → Merge into order
+```
+
+**Key Features:**
+- **Fuzzy Matching:** Fuse.js searches product names with configurable threshold — handles typos, partial names, spoken variations
+- **Quantity Parsing:** Understands "two", "a", "another", numeric digits — extracts quantity + product text
+- **Session Persistence:** MongoDB-backed session tracks `current_order`, `last_upsell`, `pending_clarification`
+- **Auto-Upsell:** After adding items, suggests relevant combos from the database
+- **Clarification Flow:** If fuzzy match returns multiple candidates, prompts user to choose (numbered list)
+- **Order Modification:** Increase, decrease, set, or remove item quantities mid-order
+
+**Response Schema:**
+```json
+{
+  "message": "Added 2x Classic Burger to your order.",
+  "clarification": "Did you mean: 1) Classic Burger 2) Veggie Burger?",
+  "upsell": "Want to add the Burger Combo for ₹299? (Save ₹50!)",
+  "order": { "items": [...], "combos": [...] },
+  "order_id": "uuid",
+  "completed": true,
+  "total": 599
+}
+```
+
+### Menu Question AI
+
+**File:** `voice-ai-assistant/ai/menuAssistantAI.js`
+
+**Model:** `meta-llama/Meta-Llama-3-70B-Instruct` via HuggingFace Router API
+
+**Purpose:** Answers natural language questions about the menu — "What combos do you have?", "Which items are vegetarian?", "What's the most popular item?"
+
+**Input:** Full menu (products + combos) + user question → 1–3 sentence natural language response.
+
+**Question Detection:** `voice-ai-assistant/utils/isQuestion.js` uses keyword matching ("which", "suggest", "recommend", "menu", "price", "?") with order-intent override ("give me", "i want", "order").
+
+### Twilio Phone Integration
+
+**Files:** `voice-ai-assistant/controllers/twilioController.js`, `voice-ai-assistant/routes/twilioRoutes.js`
+
+**Phone Number:** +1 (430) 249-1367
+
+**Flow:**
+
+1. Customer calls → Twilio hits `POST /twilio/voice`
+2. Server responds with TwiML greeting + `<Gather input="speech">` (en-IN, auto speechTimeout)
+3. Customer speaks → Twilio transcribes → hits `POST /twilio/gather`
+4. Server processes via `parseOrder()` → responds with TwiML:
+   - If order incomplete: speak response + new `<Gather>` for next input
+   - If order confirmed: speak confirmation + `<Hangup />`
+5. TTS: Sarvam AI if available, else Twilio `<Say>` fallback
+
+### Text-to-Speech (Sarvam AI)
+
+**File:** `voice-ai-assistant/services/sarvamService.js`
+
+**Model:** `bulbul:v3` | **Speaker:** `ritu` (female) | **Language:** `en-IN`
+
+**Endpoint:** `POST /tts` with `{ "text": "..." }` → returns base64-encoded WAV audio.
+
+Used by: Voice Order page (browser), Twilio voice flow, test endpoint.
+
+### AI Parsing Services
+
+| Service | Model | Endpoint | Purpose |
+|---------|-------|----------|---------|
+| **aiParserService.js** | Meta-LLama 3 70B (HuggingFace) | `https://router.huggingface.co/v1` | Primary order text → JSON parser |
+| **aiOrderParser.js** | LLama 3.1 8B (LM Studio local) | `http://localhost:1234/v1/chat/completions` | Fallback local parser |
+
+Both extract `{items: [{name, quantity, modifiers}]}` from natural language order text.
+
+---
+
+## Owner Dashboard (Frontend)
+
+**URL:** `http://localhost:5173` | **API Base:** `http://localhost:3001/api`
+
+### Tabs
+
+| # | Tab       | Page                  | Description                                                  |
+|---|-----------|-----------------------|--------------------------------------------------------------|
+| 1 | Analytics | `ProductAnalytics.jsx`| BCG quadrant view — margin %, frequency, revenue share, classification badges |
+| 2 | Pricing   | `PricingDashboard.jsx`| Per-product price/discount recommendations — apply or customize before saving |
+| 3 | Combos    | `ComboGenerator.jsx`  | Generate AI combos — view strategy, score, profit margin — save to DB |
+| 4 | Manage    | `ManageCombos.jsx`    | Manage saved combos — overview stats, deep analytics modal, delete |
+| 5 | Upsell    | `SuggestView.jsx`     | Pick a product → see ranked upsell suggestions with insight tags |
+| 6 | Orders    | `Orders.jsx`          | Order table — edit (price, discount, channel), delete orders |
+
+### Pricing Dashboard Features
+
+- BCG classification badges (Star / Hidden Gem / Volume Trap / Dog)
+- Filter by quadrant
+- Shows: current price → suggested price, change amount/%, margin %, demand score
+- "Apply Suggestion" button → `PUT /api/product/:id/pricing`
+- "Customize" mode — edit price and max discount before applying
+- Toast notifications on success/error
+
+### Combo Analytics Modal (ManageCombos)
+
+- Combo margin and customer savings
+- Per-item BCG classification, margin, units sold, order frequency
+- Pairwise buying patterns with affinity labels (Very Strong / Strong / Moderate / Weak)
+
+---
+
+## User Dashboard (User Frontend)
+
+**URL:** `http://localhost:5174` | **Brand Name:** "Order & Dine"
+
+### Session Management
+
+Each user gets a persistent UUID stored in `localStorage` as `petpooja_session` (created via `crypto.randomUUID()`). This session ID:
+- Links orders to the user across channels (chat, voice, phone)
+- Filters "My Orders" to show only the current user's orders
+- Persists across page refreshes
+
+### Tab Persistence
+
+All tabs remain mounted using CSS `display:none` instead of conditional rendering — chat history, voice transcripts, and order state survive tab switches.
+
+### Tabs
+
+| # | Tab       | Page              | Description                                                       |
+|---|-----------|-------------------|-------------------------------------------------------------------|
+| 1 | Menu      | `Menu.jsx`        | Browse all products and combos with category filter (all/main/snack/dessert/beverages) |
+| 2 | AI Chat   | `ChatOrder.jsx`   | Text-based ordering — type orders, get AI responses, confirm with "confirm" |
+| 3 | Voice     | `VoiceOrder.jsx`  | Speech-based ordering — mic button, live transcript, Sarvam TTS responses |
+| 4 | Call      | `CallOrder.jsx`   | Phone ordering — tap-to-call button, Twilio number, how-it-works guide |
+| 5 | My Orders | `MyOrders.jsx`    | Session-filtered order history — expandable cards with item details |
+
+### AI Chat Ordering
+
+- Conversational interface — user types, bot responds
+- Sends `{sessionId, text}` to `POST http://localhost:3002/parse-order`
+- Handles: order building, clarifications, upsell offers, confirmation
+- Shows system message with order ID and total on confirmation
+- "New Order" button resets chat only after order is complete
+
+### Voice Ordering
+
+- **Speech Input:** Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`) in `en-IN`
+- **States:** idle → listening → processing → speaking
+- **TTS Output:** Primary: Sarvam AI (`POST /tts`), Fallback: `window.speechSynthesis`
+- **Flow:** Tap mic → speak order → bot processes → bot speaks response → auto-continues listening
+- Transcript history maintained throughout the ordering session
+- "New Order" button resets after completion
+
+### Phone Ordering
+
+- Displays restaurant phone number: **+1 (430) 249-1367**
+- "Call Now" button using `<a href="tel:+14302491367">`
+- "How it works" guide: Call → Speak order → AI confirms → Order placed
+- Powered by Twilio + Sarvam AI TTS
+
+### My Orders
+
+- Fetches `GET /api/order/session/:sessionId` — only current user's orders
+- Stats cards: Total Orders, Total Spent, Average Order Value
+- Expandable order cards showing:
+  - Order ID, channel badge (voice/app), date
+  - Individual items: quantity × name + price
+  - Combos with (combo) label
+  - Subtotal, discount (if any), final total
 
 ---
 
@@ -459,42 +774,22 @@ $$\text{fullComboRate} = \frac{\text{orders containing ALL combo items}}{\text{t
 
 ### `areCuisinesCompatible`
 
-**Purpose:** Prevents cross-cuisine pairing (e.g. Gulab Jamun + Pepperoni Pizza) unless one item is tagged as "universal".
+Prevents cross-cuisine pairing (e.g. Gulab Jamun + Pepperoni Pizza) unless one item is "universal".
 
-**Logic:**
-- Each product name maps to a cuisine tag: `western`, `italian`, `indian`, or `universal`
-- If either item is `universal` → compatible (returns `true`)
-- Otherwise, both must share the same cuisine tag
-
-**Cuisine Tag Map:**
-
-| Cuisine   | Products                                                        |
-|-----------|-----------------------------------------------------------------|
-| Western   | Classic Burger, Grilled Sandwich, Chicken Wrap, Veggie Burger, New York Cheesecake |
-| Italian   | Margherita Pizza, Penne Pasta, Pepperoni Pizza                  |
-| Indian    | Paneer Tikka Wrap, Gulab Jamun, Mango Lassi, Masala Chai        |
+| Cuisine   | Products                                                                                    |
+|-----------|---------------------------------------------------------------------------------------------|
+| Western   | Classic Burger, Grilled Sandwich, Chicken Wrap, Veggie Burger, New York Cheesecake          |
+| Italian   | Margherita Pizza, Penne Pasta, Pepperoni Pizza                                              |
+| Indian    | Paneer Tikka Wrap, Gulab Jamun, Mango Lassi, Masala Chai                                   |
 | Universal | French Fries, Chicken Nuggets, Garlic Bread, Onion Rings, Mozzarella Sticks, Chocolate Brownie, Vanilla Ice Cream, Chocolate Mousse, Coke, Cold Coffee, Fresh Lemonade, Mojito, Chocolate Milkshake |
-
----
 
 ### `getCompatibilityScore`
 
-**Purpose:** Calculates an average culinary compatibility score for a set of products based on their category pairings and cuisine tags.
-
-**Algorithm:**
-
-1. Generate all unique pairs from the product set
-2. For each pair:
-   - Look up the category compatibility from the [Compatibility Matrix](#category-compatibility-matrix)
-   - Check cuisine compatibility via `areCuisinesCompatible`
-   - If cuisines are incompatible, multiply the score by 0.3 (penalty)
-3. Return the average score across all pairs:
+Calculates average culinary compatibility for a product set:
 
 $$\text{CompatibilityScore} = \frac{\sum_{(i,j)} S_{ij}}{|\text{pairs}|}$$
 
-Where:
-
-$$S_{ij} = \begin{cases} \text{COMPATIBILITY}[\text{cat}_i][\text{cat}_j] & \text{if cuisines compatible} \\ \text{COMPATIBILITY}[\text{cat}_i][\text{cat}_j] \times 0.3 & \text{otherwise} \end{cases}$$
+Where $S_{ij}$ is the compatibility matrix value, penalized by 0.3× if cuisines are incompatible.
 
 ---
 
@@ -507,22 +802,24 @@ $$S_{ij} = \begin{cases} \text{COMPATIBILITY}[\text{cat}_i][\text{cat}_j] & \tex
 | 1 | $\text{Margin} = \text{price} - \text{cost}$ | Product Analytics |
 | 2 | $\text{Margin\%} = \frac{\text{price} - \text{cost}}{\text{price}} \times 100$ | Product Analytics |
 | 3 | $\text{Order Frequency} = \frac{\text{orderCount}}{\text{totalOrders}}$ | Product Analytics |
-| 4 | $RevenueShare = \frac{productRevenue}{totalRevenue} \times 100$ | Product Analytics |
+| 4 | $\text{Revenue Share} = \frac{\text{productRevenue}}{\text{totalRevenue}} \times 100$ | Product Analytics |
 | 5 | $\text{Support}(A,B) = \frac{\text{pairFreq}(A,B)}{\text{totalOrders}}$ | Association Mining |
 | 6 | $\text{Confidence}(A \to B) = \frac{\text{pairFreq}(A,B)}{\text{freq}(A)}$ | Association Mining |
 | 7 | $\text{Lift}(A,B) = \frac{\text{Support}(A,B)}{P(A) \times P(B)}$ | Association Mining |
-| 8 | $\text{ComboScore} = 0.30 \cdot A + 0.25 \cdot P + 0.20 \cdot S + 0.15 \cdot C + 0.10 \cdot D$ | Combo Generator |
+| 8 | $\text{ComboScore} = 0.30A + 0.25P + 0.20S + 0.15C + 0.10D$ | Combo Generator |
 | 9 | $\text{UpsellScore} = 0.40 \cdot \text{conf} + 0.25 \cdot \text{margin} + 0.20 \cdot \text{compat} + 0.15 \cdot \text{lift}$ | Upsell Engine |
 | 10 | $\text{CompatScore} = \frac{1}{n} \sum S_{ij}$ | Combo Compatibility |
 | 11 | $\text{comboMarginPct} = \frac{\text{comboPrice} - \text{totalCost}}{\text{comboPrice}} \times 100$ | Combo Analytics |
 | 12 | $\text{savingsPct} = \frac{\text{totalSelling} - \text{comboPrice}}{\text{totalSelling}} \times 100$ | Combo Analytics |
 | 13 | $\text{fullComboRate} = \frac{\text{ordersWithAllItems}}{\text{totalOrders}} \times 100$ | Combo Analytics |
+| 14 | $\text{demandScore} = \min(100,\ \text{orderFreq} \times 200)$ | Pricing Intelligence |
+| 15 | $\text{minPrice} = \frac{\text{cost}}{1 - 0.20}$ | Pricing Intelligence |
 
 ---
 
 ## Category Compatibility Matrix
 
-Scores range from 0 to 1, indicating how well two food categories pair together. Used to prevent nonsensical combos.
+Scores range from 0 to 1, indicating how well two food categories pair together.
 
 |              | Main  | Snack | Dessert | Beverages |
 |--------------|-------|-------|---------|-----------|
@@ -532,10 +829,10 @@ Scores range from 0 to 1, indicating how well two food categories pair together.
 | **Beverages**| 0.95  | 0.90  | 0.80    | 0.20      |
 
 **Key observations:**
-- Same-category pairing is penalised (0.2–0.3) — two mains or two beverages don't make a good combo
-- **Main + Beverages** (0.95) is the strongest pairing
-- **Main + Snack** (0.90) is a natural meal combo
-- **Dessert + Beverages** (0.80) is a solid post-meal pairing
+- Same-category = penalized (0.2–0.3) — two mains don't make a combo
+- **Main + Beverages** (0.95) = strongest pairing
+- **Main + Snack** (0.90) = natural meal combo
+- **Dessert + Beverages** (0.80) = solid post-meal pairing
 
 ---
 
@@ -558,83 +855,12 @@ Products are classified using a **BCG-inspired 2×2 matrix** based on margin per
           └─────────┴────────────────────┴────────────────────┘
 ```
 
-| Classification | Margin % | Order Frequency | Strategy                              |
-|----------------|----------|-----------------|---------------------------------------|
-| **Star**       | ≥ 50%    | ≥ 15%           | Promote heavily, feature in combos    |
-| **Hidden Gem** | ≥ 50%    | < 15%           | Boost visibility by pairing with stars|
-| **Volume Trap**| < 50%    | ≥ 15%           | Raise price or pair with high-margin items|
-| **Dog**        | < 50%    | < 15%           | Consider discontinuing or repositioning|
-
-**Thresholds used:**
-- Median margin: **50%**
-- Median order frequency: **0.15** (15% of orders)
-
----
-
-## Frontend Pages
-
-### 1. ProductAnalytics
-
-Displays the profitability matrix for all products. Each product shows:
-- Margin percentage and absolute margin
-- Units sold and order frequency
-- Revenue share
-- BCG classification badge (Star, Hidden Gem, Volume Trap, Dog)
-- Visual score bar (green/yellow/red based on thresholds)
-
-### 2. ComboGenerator
-
-Calls the smart combo generation endpoint and displays AI-generated combo suggestions with:
-- Combo name and description
-- Strategy label (Pattern-Based or Hidden Gem Boost)
-- Items list with individual prices
-- Combo score, support, confidence, lift
-- Profit margin bar
-- Combo price with discount breakdown
-- "Save to DB" button
-
-### 3. ManageCombos
-
-Manages saved combos with:
-- Overview statistics (total combos, avg discount, avg items/combo, avg score)
-- Combo cards with all metadata
-- "View Analytics" modal — calls `getComboAnalytics` to show profitability, per-item breakdown, and pairwise buying patterns
-- Delete functionality with confirmation
-
-### 4. SuggestView (Upsell)
-
-Interactive upsell recommendation engine:
-- Product selector to pick a base product
-- Displays ranked individual item suggestions with:
-  - Upsell score and confidence
-  - Insight tags (Strong Pattern, High Margin, etc.)
-  - Human-readable reasoning
-- Shows matching saved combos containing the selected product
-- Manual combo creation from the suggestions view
-
----
-
-## CRUD Controllers
-
-### `addProduct`
-
-Creates a new product document. Requires `name`, `category`, `selling_price`, and `cost`.
-
-### `addOrder`
-
-Creates a new order document. Requires `order_id`, `order_channel`, `total_items`, `total_price`, and `final_price`. Rejects duplicate `order_id` values (HTTP 409).
-
-### `addCombo`
-
-Saves a generated combo to the database. Requires `combo_name`, `total_selling_price`, and `combo_price`.
-
-### `getAllCombos`
-
-Returns all saved combos sorted by `combo_score` descending.
-
-### `deleteCombo`
-
-Deletes a combo by its MongoDB `_id`. Returns 404 if not found.
+| Classification | Margin % | Order Freq | Strategy                              |
+|----------------|----------|------------|---------------------------------------|
+| **Star**       | ≥ 50%    | ≥ 15%     | Promote heavily, feature in combos    |
+| **Hidden Gem** | ≥ 50%    | < 15%     | Boost visibility by pairing with stars|
+| **Volume Trap**| < 50%    | ≥ 15%     | Raise price or pair with high-margin items|
+| **Dog**        | < 50%    | < 15%     | Consider discontinuing or repositioning|
 
 ---
 

@@ -43,12 +43,6 @@ export default function PricingDashboard({ apiBase }) {
         const id = product.product_id
         setApplying(prev => ({ ...prev, [id]: true }))
 
-<<<<<<< HEAD
-        const body = {
-            selling_price: overrides.selling_price ?? product.suggested_price,
-            suggested_price: product.suggested_price,
-            max_discount_pct: overrides.max_discount_pct ?? product.max_discount_pct,
-=======
         const newSellingPrice = overrides.selling_price ?? product.suggested_price
         const newMaxDiscountPct = overrides.max_discount_pct ?? product.max_discount_pct
 
@@ -56,7 +50,6 @@ export default function PricingDashboard({ apiBase }) {
             selling_price: newSellingPrice,
             suggested_price: product.suggested_price,
             max_discount_pct: newMaxDiscountPct,
->>>>>>> 735fc33a3ef026984823929fad0408d575601243
             min_price: product.min_price,
         }
 
@@ -70,10 +63,6 @@ export default function PricingDashboard({ apiBase }) {
             if (json.success) {
                 showToast(`${product.name} pricing updated`)
                 setEditingId(null)
-<<<<<<< HEAD
-                fetchData()
-=======
-                // Update only the affected product in local state — no full page reload
                 setData(prev => ({
                     ...prev,
                     data: prev.data.map(p =>
@@ -81,8 +70,8 @@ export default function PricingDashboard({ apiBase }) {
                             ? {
                                 ...p,
                                 current_price: newSellingPrice,
-                                suggested_price: newSellingPrice,   // suggestion is now the live price
-                                price_change_amt: 0,                // no remaining change after applying
+                                suggested_price: newSellingPrice,
+                                price_change_amt: 0,
                                 price_change_pct: 0,
                                 max_discount_pct: newMaxDiscountPct,
                                 max_discount_amt: Math.round(newSellingPrice * newMaxDiscountPct / 100),
@@ -90,7 +79,6 @@ export default function PricingDashboard({ apiBase }) {
                             : p
                     )
                 }))
->>>>>>> 735fc33a3ef026984823929fad0408d575601243
             } else {
                 showToast(json.message || 'Failed to apply', 'error')
             }

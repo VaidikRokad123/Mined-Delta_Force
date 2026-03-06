@@ -2,7 +2,7 @@ const Order = require("../models/order.model.js");
 
 const addOrder = async (req, res) => {
     try {
-        const { order_id, order_channel, items, combos, total_items, total_price, discount, final_price, order_score, rating } = req.body;
+        const { order_id, session_id, order_channel, items, combos, total_items, total_price, discount, final_price, order_score, rating } = req.body;
 
         if (!order_id || !order_channel || !total_items || !total_price || !final_price) {
             return res.status(400).json({ success: false, message: "order_id, order_channel, total_items, total_price and final_price are required" });
@@ -15,6 +15,7 @@ const addOrder = async (req, res) => {
 
         const order = await Order.create({
             order_id,
+            session_id,
             order_channel,
             items,
             combos,
@@ -77,4 +78,14 @@ const deleteOrder = async (req, res) => {
     }
 };
 
-module.exports = { addOrder, getAllOrders, updateOrder, deleteOrder };
+const getOrdersBySession = async (req, res) => {
+    try {
+        const { sessionId } = req.params;
+        const orders = await Order.find({ session_id: sessionId }).sort({ createdAt: -1 });
+        return res.status(200).json({ success: true, data: orders });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { addOrder, getAllOrders, updateOrder, deleteOrder, getOrdersBySession };

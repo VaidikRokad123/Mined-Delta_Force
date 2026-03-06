@@ -1,17 +1,29 @@
 const Product = require("../models/product.model");
-const Combo   = require("../models/combo.model");
-const Order   = require("../models/order.model");
+const Combo = require("../models/combo.model");
+const Order = require("../models/order.model");
 const Session = require("../models/session.model");
-const Fuse    = require("fuse.js");
+const Fuse = require("fuse.js");
 const { v4: uuidv4 } = require("uuid"); // npm i uuid
-
+const menuAssistantAI = require("../ai/menuAssistantAI");
+const isQuestion = require("../utils/isQuestion");
 // ─────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────
 
-const CONFIRM_WORDS       = ["yes", "yeah", "ok", "okay", "sure", "yep"];
-const REJECT_WORDS        = ["no", "nope", "nah"];
+const CONFIRM_WORDS = ["yes", "yeah", "ok", "okay", "sure", "yep"];
+const REJECT_WORDS = ["no", "nope", "nah"];
 const CONFIRM_ORDER_WORDS = ["confirm", "place order", "done", "finish", "that's all", "thats all"];
+const DELETE_WORDS = ["remove", "delete", "cancel"];
+const INCREASE_WORDS = [
+    "increase",
+    "more",
+    "add more",
+    "add one more",
+    "another",
+    "one more"
+];
+const SET_QTY_WORDS = ["make", "set"];
+const REPLACE_WORDS = ["replace", "change", "swap"];
 
 const FILLER_WORDS = [
     "give", "me", "can", "i", "get", "want",
@@ -64,9 +76,9 @@ function mergeComboIntoOrder(existingCombos, newCombo) {
  * Human-readable order summary: "2x Burger, 1x Fries, 1x Burger Combo (combo)"
  */
 function orderSummary(order) {
-    const itemParts  = (order.items  || []).map(i => `${i.quantity}x ${i.name}`);
+    const itemParts = (order.items || []).map(i => `${i.quantity}x ${i.name}`);
     const comboParts = (order.combos || []).map(c => `${c.quantity}x ${c.combo_name} (combo)`);
-    const all        = [...itemParts, ...comboParts];
+    const all = [...itemParts, ...comboParts];
     return all.length ? all.join(", ") : "nothing yet";
 }
 
@@ -75,12 +87,12 @@ function orderSummary(order) {
  */
 function calculateTotals(order) {
     const totalPrice = [
-        ...(order.items  || []).map(i => i.base_price  * i.quantity),
+        ...(order.items || []).map(i => i.base_price * i.quantity),
         ...(order.combos || []).map(c => c.combo_price * c.quantity)
     ].reduce((s, v) => s + v, 0);
 
     const totalItems = [
-        ...(order.items  || []).map(i => i.quantity),
+        ...(order.items || []).map(i => i.quantity),
         ...(order.combos || []).map(c => c.quantity)
     ].reduce((s, v) => s + v, 0);
 
@@ -92,27 +104,27 @@ function calculateTotals(order) {
  * "two burgers with cheese" → { quantity: 2, productText: "burger" }
  */
 function extractQuantityAndText(raw) {
-    let part     = raw.trim();
+    let part = raw.trim();
     let quantity = 1;
 
     const digitMatch = part.match(/\b(\d+)\b/);
     if (digitMatch) {
         quantity = parseInt(digitMatch[1], 10);
-        part     = part.replace(digitMatch[0], "");
+        part = part.replace(digitMatch[0], "");
     }
 
     for (const [word, val] of Object.entries(NUMBER_WORDS)) {
         const re = new RegExp(`\\b${word}\\b`, "i");
         if (re.test(part)) {
             quantity = val;
-            part     = part.replace(re, "");
+            part = part.replace(re, "");
         }
     }
 
     let productText = part
-        .replace(/\bwith\b/gi,    "")
+        .replace(/\bwith\b/gi, "")
         .replace(/\bwithout\b/gi, "")
-        .replace(/\bno\b/gi,      "")
+        .replace(/\bno\b/gi, "")
         .trim();
 
     // Naive de-pluralise: "burgers" → "burger"
@@ -131,9 +143,9 @@ exports.parseOrder = async (req, res) => {
     try {
         let { text, sessionId } = req.body;
 
-        if (!text)      return res.status(400).json({ message: "Text missing." });
+        if (!text) return res.status(400).json({ message: "Text missing." });
         if (!sessionId) return res.status(400).json({ message: "sessionId missing." });
-
+          
         text = text.toLowerCase().trim();
         console.log(`🎤 [${sessionId}] User said: "${text}"`);
 
@@ -142,12 +154,12 @@ exports.parseOrder = async (req, res) => {
 
         if (!session) {
             session = await Session.create({
-                session_id:            sessionId,
-                current_order:         { items: [], combos: [] },
-                last_upsell:           null,
+                session_id: sessionId,
+                current_order: { items: [], combos: [] },
+                last_upsell: null,
                 pending_clarification: null,
-                last_question:         null,   // reused to store pending quantity during clarification
-                status:                "ordering"
+                last_question: null,   // reused to store pending quantity during clarification
+                status: "ordering"
             });
         }
 
@@ -156,60 +168,81 @@ exports.parseOrder = async (req, res) => {
             session.current_order.combos = [];
             session.markModified("current_order");
         }
+        // ════════════════════════════════════════════════════════════
+// AI MENU QUESTION HANDLING
+// ════════════════════════════════════════════════════════════
 
+if (isQuestion(text)) {
+
+    console.log("🤖 AI menu question detected:", text);
+
+    const products = await Product.find();
+    const combos = await Combo.find();
+
+    const aiResponse = await menuAssistantAI(
+        text,
+        products,
+        combos
+    );
+    console.log("🤖 AI response:", aiResponse);
+    return res.json({
+        message: aiResponse,
+        ai: true
+    });
+}
         // ════════════════════════════════════════════════════════════════════
         // 1. ORDER CONFIRMATION  (highest priority)
         // ════════════════════════════════════════════════════════════════════
         if (CONFIRM_ORDER_WORDS.some(w => text.includes(w))) {
 
-            const hasItems  = session.current_order.items?.length  > 0;
+            const hasItems = session.current_order.items?.length > 0;
             const hasCombos = session.current_order.combos?.length > 0;
 
             if (!hasItems && !hasCombos) {
                 return res.json({ message: "Your order is empty! What would you like to order?" });
             }
 
-            const finalOrder                    = JSON.parse(JSON.stringify(session.current_order));
+            const finalOrder = JSON.parse(JSON.stringify(session.current_order));
             const { totalItems, totalPrice, finalPrice } = calculateTotals(finalOrder);
 
             // Persist to Order collection — matches orderSchema exactly
             const savedOrder = await Order.create({
-                order_id:      uuidv4(),
+                order_id: uuidv4(),
                 order_channel: "voice",
                 items: finalOrder.items.map(i => ({
-                    product_id:         i.product_id,
-                    name:               i.name,
-                    quantity:           i.quantity,
-                    base_price:         i.base_price,
+                    product_id: i.product_id,
+                    name: i.name,
+                    quantity: i.quantity,
+                    base_price: i.base_price,
                     selected_modifiers: i.selected_modifiers || []
                 })),
                 combos: (finalOrder.combos || []).map(c => ({
-                    combo_id:    c.combo_id,
-                    combo_name:  c.combo_name,
-                    quantity:    c.quantity,
+                    combo_id: c.combo_id,
+                    combo_name: c.combo_name,
+                    quantity: c.quantity,
                     combo_price: c.combo_price
                 })),
-                total_items:  totalItems,
-                total_price:  totalPrice,
-                discount:     0,
-                final_price:  finalPrice,
-                order_score:  0,
-                rating:       0
+                total_items: totalItems,
+                total_price: totalPrice,
+                discount: 0,
+                final_price: finalPrice,
+                order_score: 0,
+                rating: 0
             });
 
             // Full session reset
-            session.current_order        = { items: [], combos: [] };
-            session.last_upsell           = null;
+            session.current_order = { items: [], combos: [] };
+            session.last_upsell = null;
             session.pending_clarification = null;
-            session.last_question         = null;
-            session.status                = "ordering";
+            session.last_question = null;
+            session.status = "ordering";
             session.markModified("current_order");
             await session.save();
 
             return res.json({
-                message:   `🎉 Order confirmed! You ordered: ${orderSummary(finalOrder)}. Total: ₹${finalPrice}.`,
-                order:     finalOrder,
-                order_id:  savedOrder.order_id,
+                message: `🎉 Order confirmed! You ordered: ${orderSummary(finalOrder)}. Total: ₹${finalPrice}.`,
+                order: finalOrder,
+                order_id: savedOrder.order_id,
                 completed: true
             });
         }
@@ -223,9 +256,9 @@ exports.parseOrder = async (req, res) => {
                 const u = session.last_upsell;
 
                 mergeComboIntoOrder(session.current_order.combos, {
-                    combo_id:    u.combo_id,
-                    combo_name:  u.combo_name,
-                    quantity:    1,
+                    combo_id: u.combo_id,
+                    combo_name: u.combo_name,
+                    quantity: 1,
                     combo_price: u.combo_price
                 });
 
@@ -235,7 +268,7 @@ exports.parseOrder = async (req, res) => {
 
                 return res.json({
                     message: `✅ Added "${u.combo_name}" combo! Anything else, or say "confirm" to place your order?`,
-                    order:   session.current_order
+                    order: session.current_order
                 });
             }
 
@@ -245,7 +278,7 @@ exports.parseOrder = async (req, res) => {
 
                 return res.json({
                     message: `No problem! Anything else, or say "confirm" to place your order?`,
-                    order:   session.current_order
+                    order: session.current_order
                 });
             }
 
@@ -260,7 +293,7 @@ exports.parseOrder = async (req, res) => {
         if (session.pending_clarification) {
 
             const options = session.pending_clarification;
-            let chosen    = null;
+            let chosen = null;
 
             // a) Numeric pick: "1", "2", "3"
             const numMatch = text.match(/\b([123])\b/);
@@ -285,7 +318,7 @@ exports.parseOrder = async (req, res) => {
             // c) Fuzzy fallback
             if (!chosen) {
                 const clarFuse = new Fuse(options, { keys: ["name"], threshold: 0.5 });
-                const match    = clarFuse.search(text);
+                const match = clarFuse.search(text);
                 if (match.length) chosen = match[0].item;
             }
 
@@ -300,13 +333,13 @@ exports.parseOrder = async (req, res) => {
             const qty = parseInt(session.last_question) || 1;
 
             session.pending_clarification = null;
-            session.last_question         = null;
+            session.last_question = null;
 
             mergeIntoOrder(session.current_order.items, [{
-                product_id:         chosen.product_id,
-                name:               chosen.name,
-                quantity:           qty,
-                base_price:         chosen.base_price,
+                product_id: chosen.product_id,
+                name: chosen.name,
+                quantity: qty,
+                base_price: chosen.base_price,
                 selected_modifiers: []
             }]);
 
@@ -320,8 +353,8 @@ exports.parseOrder = async (req, res) => {
             if (combo) {
                 upsell = `🍱 How about our "${combo.combo_name}" combo for ₹${combo.combo_price}? Great value!`;
                 session.last_upsell = {
-                    combo_id:    combo._id,
-                    combo_name:  combo.combo_name,
+                    combo_id: combo._id,
+                    combo_name: combo.combo_name,
                     combo_price: combo.combo_price
                 };
             }
@@ -330,13 +363,285 @@ exports.parseOrder = async (req, res) => {
 
             return res.json({
                 message: `✅ Added ${qty}x ${chosen.name}. Order so far: ${orderSummary(session.current_order)}. Anything else?`,
-                order:   session.current_order,
+                order: session.current_order,
                 upsell
             });
         }
 
         // ════════════════════════════════════════════════════════════════════
-        // 4. PARSE NEW ORDER TEXT
+        // DELETE OR REDUCE ITEM FROM ORDER
+        // ════════════════════════════════════════════════════════════════════
+
+        if (DELETE_WORDS.some(w => text.includes(w))) {
+
+            console.log("🗑 Delete intent detected:", text);
+
+            const orderItems = session.current_order.items;
+
+            if (!orderItems.length) {
+                return res.json({
+                    message: "Your order is empty."
+                });
+            }
+
+            const fuse = new Fuse(orderItems, {
+                keys: ["name"],
+                threshold: 0.4
+            });
+
+            const cleaned = text
+                .replace(/remove|delete|cancel/gi, "")
+                .replace(/\bone\b|\btwo\b|\bthree\b|\bfour\b|\bfive\b/gi, "")
+                .replace(/\d+/g, "")
+                .trim();
+
+            console.log("Searching item:", cleaned);
+
+            const result = fuse.search(cleaned);
+
+            console.log("Fuse result:", result);
+
+            if (!result.length) {
+                return res.json({
+                    message: "I couldn't find that item in your order."
+                });
+            }
+
+            const item = result[0].item;
+
+            let removeQty = 1;
+
+            const digitMatch = text.match(/\b(\d+)\b/);
+            if (digitMatch) removeQty = parseInt(digitMatch[1]);
+
+            for (const [word, num] of Object.entries(NUMBER_WORDS)) {
+                if (text.includes(word)) removeQty = num;
+            }
+
+            if (item.quantity > removeQty) {
+
+                item.quantity -= removeQty;
+
+                session.markModified("current_order");
+                await session.save();
+
+                return res.json({
+                    message: `Removed ${removeQty} ${item.name}. Order now: ${orderSummary(session.current_order)}.`,
+                    order: session.current_order
+                });
+
+            }
+
+            const index = session.current_order.items.findIndex(
+                i => i.product_id.toString() === item.product_id.toString()
+            );
+
+            session.current_order.items.splice(index, 1);
+
+            session.markModified("current_order");
+            await session.save();
+
+            return res.json({
+                message: `Removed ${item.name}. Order now: ${orderSummary(session.current_order)}.`,
+                order: session.current_order
+            });
+        }
+
+
+
+        // ════════════════════════════════════════════════════════════════════
+        // UPDATE ITEM QUANTITY
+        // ════════════════════════════════════════════════════════════════════
+
+        if (
+            INCREASE_WORDS.some(w => text.includes(w)) ||
+            SET_QTY_WORDS.some(w => text.includes(w))
+        ) {
+
+            console.log("🔧 Quantity update detected:", text);
+
+            const orderItems = session.current_order.items;
+
+            if (!orderItems.length) {
+                return res.json({
+                    message: "Your order is empty."
+                });
+            }
+
+            const fuse = new Fuse(orderItems, {
+                keys: ["name"],
+                threshold: 0.4
+            });
+
+            const cleaned = text
+                .replace(/increase|add more|one more|another|more|make|set|change/gi, "")
+                .replace(/\b\d+\b/g, "")
+                .trim();
+
+            console.log("Searching order item:", cleaned);
+
+            const result = fuse.search(cleaned);
+
+            console.log("Fuse match:", result);
+
+            if (!result.length) {
+                return res.json({
+                    message: "I couldn't find that item in your order."
+                });
+            }
+
+            const item = result[0].item;
+
+            let qty = null;
+
+            const digitMatch = text.match(/\b(\d+)\b/);
+
+            if (digitMatch) {
+                qty = parseInt(digitMatch[1]);
+            }
+
+            for (const [word, num] of Object.entries(NUMBER_WORDS)) {
+                if (text.includes(word)) {
+                    qty = num;
+                }
+            }
+
+            // INCREASE QUANTITY
+            if (INCREASE_WORDS.some(w => text.includes(w))) {
+
+                const increaseBy = qty ? qty : 1;
+
+                item.quantity += increaseBy;
+
+            }
+
+            // SET QUANTITY
+            if (SET_QTY_WORDS.some(w => text.includes(w))) {
+
+                if (qty) {
+                    item.quantity = qty;
+                } else {
+                    return res.json({
+                        message: "Please tell me the quantity."
+                    });
+                }
+
+            }
+
+            session.markModified("current_order");
+            await session.save();
+
+            return res.json({
+                message: `Updated ${item.name} quantity to ${item.quantity}. Order now: ${orderSummary(session.current_order)}.`,
+                order: session.current_order
+            });
+        }
+
+
+
+        // ════════════════════════════════════════════════════════════════════
+        // REPLACE ITEM IN ORDER
+        // ════════════════════════════════════════════════════════════════════
+
+        if (REPLACE_WORDS.some(w => text.includes(w))) {
+
+            console.log("🔁 Replace intent detected:", text);
+
+            const parts = text.split(/to|with/);
+
+            if (parts.length < 2) {
+                return res.json({
+                    message: "What would you like to replace it with?"
+                });
+            }
+
+            // CLEAN OLD ITEM TEXT
+            const oldItemText = parts[0]
+                .replace(/replace|change|swap/gi, "")
+                .trim();
+
+            // CLEAN NEW ITEM TEXT
+            const newItemText = parts[1].trim();
+
+            console.log("Old item search:", oldItemText);
+            console.log("New item search:", newItemText);
+
+            const orderItems = session.current_order.items;
+
+            if (!orderItems.length) {
+                return res.json({
+                    message: "Your order is empty."
+                });
+            }
+
+            // FIND OLD ITEM IN ORDER
+            const fuseOrder = new Fuse(orderItems, {
+                keys: ["name"],
+                threshold: 0.4
+            });
+
+            const oldMatch = fuseOrder.search(oldItemText);
+
+            console.log("Old item match:", oldMatch);
+
+            if (!oldMatch.length) {
+                return res.json({
+                    message: "I couldn't find that item in your order."
+                });
+            }
+
+            const oldItem = oldMatch[0].item;
+
+            // FIND NEW PRODUCT IN MENU
+            const products = await Product.find();
+
+            const fuseProducts = new Fuse(products, {
+                keys: ["name"],
+                threshold: 0.4
+            });
+
+            const newMatch = fuseProducts.search(newItemText);
+
+            console.log("New item match:", newMatch);
+
+            if (!newMatch.length) {
+                return res.json({
+                    message: "I couldn't find that item on the menu."
+                });
+            }
+
+            const newProduct = newMatch[0].item;
+
+            // REMOVE OLD ITEM
+            const index = session.current_order.items.findIndex(
+                i => i.product_id.toString() === oldItem.product_id.toString()
+            );
+
+            const qty = oldItem.quantity;
+
+            session.current_order.items.splice(index, 1);
+
+            // add new item using merge helper
+            mergeIntoOrder(session.current_order.items, [{
+                product_id: newProduct._id,
+                name: newProduct.name,
+                quantity: qty,
+                base_price: newProduct.selling_price,
+                selected_modifiers: []
+            }]);
+
+            session.markModified("current_order");
+            await session.save();
+
+            return res.json({
+                message: `Replaced ${oldItem.name} with ${newProduct.name}. Order now: ${orderSummary(session.current_order)}.`,
+                order: session.current_order
+            });
+        }
+
+
+        // ════════════════════════════════════════════════════════════════════
+        // 5. PARSE NEW ORDER TEXT
         // ════════════════════════════════════════════════════════════════════
 
         // Remove filler words
@@ -354,8 +659,8 @@ exports.parseOrder = async (req, res) => {
         }
 
         const fuse = new Fuse(products, {
-            keys:         ["name"],
-            threshold:    0.45,
+            keys: ["name"],
+            threshold: 0.45,
             includeScore: true
         });
 
@@ -366,26 +671,26 @@ exports.parseOrder = async (req, res) => {
             if (!productText) continue;
 
             const rawResults = fuse.search(productText, { limit: 5 });
-            const results    = rawResults.filter(r => r.score !== undefined && r.score <= 0.45);
+            const results = rawResults.filter(r => r.score !== undefined && r.score <= 0.45);
 
             if (!results.length) continue;
 
             // ── Ambiguity detection ─────────────────────────────────────────
             // Trigger when the top two scores are too close to call (gap < 0.15)
-            const topScore    = results[0].score ?? 1;
+            const topScore = results[0].score ?? 1;
             const secondScore = results[1]?.score ?? 1;
-            const ambiguous   = results.length > 1 && (secondScore - topScore) < 0.15;
+            const ambiguous = results.length > 1 && (secondScore - topScore) < 0.15;
 
             if (ambiguous) {
                 const options = results.slice(0, 3).map(r => ({
                     product_id: r.item._id,
-                    name:       r.item.name,
+                    name: r.item.name,
                     base_price: r.item.selling_price
                 }));
 
                 // Store quantity in last_question so it survives the round-trip
                 session.pending_clarification = options;
-                session.last_question         = String(quantity);
+                session.last_question = String(quantity);
                 await session.save();
 
                 return res.json({
@@ -396,10 +701,10 @@ exports.parseOrder = async (req, res) => {
             // Clear winner
             const product = results[0].item;
             parsedItems.push({
-                product_id:         product._id,
-                name:               product.name,
+                product_id: product._id,
+                name: product.name,
                 quantity,
-                base_price:         product.selling_price,
+                base_price: product.selling_price,
                 selected_modifiers: []
             });
         }
@@ -423,8 +728,8 @@ exports.parseOrder = async (req, res) => {
         if (combo) {
             upsell = `🍱 How about our "${combo.combo_name}" combo for ₹${combo.combo_price}? Great value!`;
             session.last_upsell = {
-                combo_id:    combo._id,
-                combo_name:  combo.combo_name,
+                combo_id: combo._id,
+                combo_name: combo.combo_name,
                 combo_price: combo.combo_price
             };
         }
@@ -435,7 +740,7 @@ exports.parseOrder = async (req, res) => {
 
         return res.json({
             message: `✅ Added ${addedNames}. Order so far: ${orderSummary(session.current_order)}. Anything else?`,
-            order:   session.current_order,
+            order: session.current_order,
             upsell
         });
 

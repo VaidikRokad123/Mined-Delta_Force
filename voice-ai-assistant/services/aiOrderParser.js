@@ -5,15 +5,19 @@ const client = new OpenAI({
     apiKey: process.env.HF_API_KEY
 });
 
-async function parseOrderWithAI(text, products) {
+async function parseOrderWithAI(text, products, combos) {
     try {
         const menu = products.map(p => p.name).join(", ");
+        const comboMenu = combos.map(c => c.name).join(", ");
 
         const prompt = `
 You are a restaurant AI order parser.
 
 Menu items:
 ${menu}
+
+Combo items:
+${comboMenu}
 
 User order:
 "${text}"

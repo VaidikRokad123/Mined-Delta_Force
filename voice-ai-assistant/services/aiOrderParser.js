@@ -1,58 +1,68 @@
-const axios = require("axios");
+const { OpenAI } = require("openai");
 
-async function parseOrderWithAI(text, products){
+const client = new OpenAI({
+    baseURL: "https://router.huggingface.co/v1",
+    apiKey: process.env.HF_API_KEY
+});
 
-    try{
-
+async function parseOrderWithAI(text, products) {
+    try {
         const menu = products.map(p => p.name).join(", ");
 
         const prompt = `
-You are a food ordering AI.
+You are a restaurant AI order parser.
 
-Menu:
+Menu items:
 ${menu}
 
-User said:
+User order:
 "${text}"
 
-Return JSON only in this format:
+Extract the order and return ONLY JSON in this format:
+
 {
- "items":[
-   {
-     "name":"product name",
-     "quantity":1,
-     "modifiers":[]
-   }
- ]
+  "items":[
+    {
+      "name":"burger",
+      "quantity":2,
+      "modifiers":["extra cheese"]
+    }
+  ]
 }
+
+If quantity not mentioned, assume 1.
 `;
 
-        const response = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
-            {
-                contents: [
-                    {
-                        parts: [{ text: prompt }]
-                    }
-                ]
-            }
-        );
+        const response = await client.chat.completions.create({
+            model: "meta-llama/Meta-Llama-3-70B-Instruct",
+            messages: [
+                { role: "user", content: prompt }
+            ],
+            temperature: 0
+        });
 
-        const aiText = response.data.candidates[0].content.parts[0].text;
+        const output = response.choices[0].message.content;
 
-        return JSON.parse(aiText);
+        console.log("AI response:", output);
 
-    }
-    catch(error){
+        // Extract JSON even if extra text is added
+        const jsonMatch = output.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            console.log("❌ No JSON detected in AI response");
+            return null;
+        }
 
-        console.log("❌ Gemini API failed");
+        return JSON.parse(jsonMatch[0]);
 
-        if(error.response){
+    } catch (error) {
+        console.log("HF AI failed:", error.message);
+
+        if (error.response) {
             console.log("Status:", error.response.status);
             console.log("Data:", error.response.data);
         }
 
-        return null;   // important fallback
+        return null;
     }
 }
 

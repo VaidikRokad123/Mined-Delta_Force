@@ -4,14 +4,19 @@ import ProductAnalytics from './pages/ProductAnalytics'
 import ComboGenerator from './pages/ComboGenerator'
 import SuggestView from './pages/SuggestView'
 import ManageCombos from './pages/ManageCombos'
+import Orders from './pages/Orders'
+// Pricing Dashboard — data-driven price suggestions & discount thresholds page
+import PricingDashboard from './pages/PricingDashboard'
 
-const API_BASE = 'http://localhost:3000/api'
+const API_BASE = 'http://localhost:3001/api'
 
 const NAV_ITEMS = [
   { id: 'products', label: 'Analytics' },
+  { id: 'pricing', label: 'Pricing' },   // Pricing & Discount Intelligence tab
   { id: 'combos', label: 'Combos' },
   { id: 'manage', label: 'Manage' },
   { id: 'suggest', label: 'Upsell' },
+  { id: 'orders', label: 'Orders' },
 ]
 
 function App() {
@@ -39,9 +44,12 @@ function App() {
 
       <main className="main-content">
         {activeTab === 'products' && <ProductAnalytics apiBase={API_BASE} />}
+        {/* Pricing Dashboard — shows per-product price/discount recommendations from analytics */}
+        {activeTab === 'pricing' && <PricingDashboard apiBase={API_BASE} />}
         {activeTab === 'combos' && <ComboGenerator apiBase={API_BASE} />}
         {activeTab === 'manage' && <ManageCombos apiBase={API_BASE} />}
         {activeTab === 'suggest' && <SuggestView apiBase={API_BASE} />}
+        {activeTab === 'orders' && <Orders apiBase={API_BASE} />}
       </main>
     </div>
   )

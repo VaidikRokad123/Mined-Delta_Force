@@ -4,8 +4,8 @@ const Order = require("../models/order.model");
 const Session = require("../models/session.model");
 const Fuse = require("fuse.js");
 const { v4: uuidv4 } = require("uuid"); // npm i uuid
+const detectIntent = require("../utils/intentDetector");
 const menuAssistantAI = require("../ai/menuAssistantAI");
-const isQuestion = require("../utils/isQuestion");
 
 // ─────────────────────────────────────────────
 // CONSTANTS
@@ -24,7 +24,7 @@ const INCREASE_WORDS = [
     "one more"
 ];
 const SET_QTY_WORDS = ["make", "set"];
-const REPLACE_WORDS = ["replace", "change", "swap"];
+const REPLACE_WORDS = ["replace", "change", "swap", "modify", "modified"];
 const SKIP_ADDON_WORDS = ["no", "nope", "nah", "skip", "none", "nothing", "no thanks", "that's it", "thats it"];
 
 const FILLER_WORDS = [
@@ -115,6 +115,14 @@ function calculateTotals(order) {
 function extractQuantityAndText(raw) {
     let part = raw.trim();
     let quantity = 1;
+
+    // Detect if the number is likely a price or negotiation rather than quantity
+    // e.g. "burger for 100" -> 100 is price, not quantity.
+    const priceContextMatch = part.match(/\b(for|at|rs|rupees|bucks|price|cost)\b\s*(\d+)/i);
+    if (priceContextMatch) {
+        // Remove the price context so it's not picked up as quantity
+        part = part.replace(priceContextMatch[0], "");
+    }
 
     const digitMatch = part.match(/\b(\d+)\b/);
     if (digitMatch) {
@@ -215,6 +223,25 @@ exports.parseOrder = async (req, res) => {
         if (!session.current_order.combos) {
             session.current_order.combos = [];
             session.markModified("current_order");
+        }
+
+        // ── Detect Intent ───────────────────────────────────────────────────
+        const intent = await detectIntent(text);
+        console.log(`🎯 [${sessionId}] Detected Intent: ${intent}`);
+
+        if (intent === "NEGOTIATION") {
+            return res.json({
+                message: "Sorry, our prices are fixed as per the menu. We don't support negotiation, but I can help you find something within your budget!",
+                ai: true
+            });
+        }
+
+        if (intent === "GREETING") {
+            const aiResponse = await menuAssistantAI(text, await Product.find(), await Combo.find());
+            return res.json({
+                message: aiResponse,
+                ai: true
+            });
         }
 
         // ════════════════════════════════════════════════════════════════════
@@ -836,7 +863,7 @@ exports.parseOrder = async (req, res) => {
         // AI MENU QUESTION HANDLING
         // ════════════════════════════════════════════════════════════
 
-        if (await isQuestion(text)) {
+        if (intent === "QUESTION") {
 
             console.log("🤖 AI menu question detected:", text);
 

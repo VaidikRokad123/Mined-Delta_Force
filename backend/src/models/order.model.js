@@ -54,6 +54,10 @@ const orderSchema = new mongoose.Schema({
         required: true,
         unique: true,
     },
+    session_id: {
+        type: String,
+        default: null,
+    },
     order_channel: {
         type: String,
         required: true,
@@ -88,6 +92,7 @@ const orderSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 orderSchema.index({ "items.product_id": 1 });
+orderSchema.index({ session_id: 1 });
 
 
 module.exports = mongoose.model("Order", orderSchema);

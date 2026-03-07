@@ -128,6 +128,8 @@ async function computeProductAnalytics() {
             order_frequency: parseFloat(orderFrequency.toFixed(3)),
             revenue_share: parseFloat(revenueShare.toFixed(2)),
             classification,
+            max_discount_pct: p.max_discount_pct ?? null,   // from pricing dashboard
+            suggested_price: p.suggested_price ?? null,     // from pricing dashboard
         };
     });
 
@@ -240,7 +242,14 @@ const generateSmartCombos = async (req, res) => {
 
             const totalSelling = comboProducts.reduce((s, p) => s + p.selling_price, 0);
             const totalCost = comboProducts.reduce((s, p) => s + p.cost, 0);
-            const discountPct = 0.10;
+            // ─── DATA-DRIVEN COMBO DISCOUNT (was hardcoded 10%) ──────────
+            // Instead of a fixed 10% discount, we now average the max_discount_pct
+            // across all products in the combo. If a product hasn't had its
+            // discount threshold set yet (null), we fall back to 10%.
+            // The result is capped at 15% to prevent over-discounting.
+            // e.g., products with max_discount [10%, 25%, 10%] → avg=15% → capped at 15%
+            const avgMaxDiscount = comboProducts.reduce((s, p) => s + (p.max_discount_pct != null ? p.max_discount_pct : 10), 0) / comboProducts.length;
+            const discountPct = Math.min(avgMaxDiscount, 15) / 100;
             const discountAmt = Math.round(totalSelling * discountPct);
             const comboPrice = totalSelling - discountAmt;
             const profitMargin = (comboPrice - totalCost) / comboPrice;
@@ -316,7 +325,12 @@ const generateSmartCombos = async (req, res) => {
 
                 const totalSelling = comboProducts.reduce((s, p) => s + p.selling_price, 0);
                 const totalCost = comboProducts.reduce((s, p) => s + p.cost, 0);
-                const discountPct = 0.12;
+                // ─── DATA-DRIVEN COMBO DISCOUNT (was hardcoded 12%) ──────
+                // Hidden gem boost combos get a slightly higher default (12%)
+                // since the goal is to boost discovery of low-demand items.
+                // Cap at 20% to preserve profitability.
+                const avgMaxDiscount = comboProducts.reduce((s, p) => s + (p.max_discount_pct != null ? p.max_discount_pct : 12), 0) / comboProducts.length;
+                const discountPct = Math.min(avgMaxDiscount, 20) / 100;
                 const discountAmt = Math.round(totalSelling * discountPct);
                 const comboPrice = totalSelling - discountAmt;
                 const profitMargin = (comboPrice - totalCost) / comboPrice;
@@ -728,4 +742,225 @@ const getComboAnalytics = async (req, res) => {
     }
 };
 
-module.exports = { generateSmartCombos, getProductAnalytics, getAssociationRules, getSuggestions, getComboAnalytics };
+// ─── STEP 7: Pricing & Discount Recommendations ─────────────────────────────
+// PURPOSE: Computes data-driven price suggestions and max discount thresholds
+// for every product. The owner sees these on the "Pricing" dashboard and can
+// accept, customize, or reject each recommendation.
+//
+// HOW IT WORKS:
+// 1. Reuses computeProductAnalytics() to get BCG classification (star/hidden_gem/volume_trap/dog)
+// 2. Computes demand score (0-100) and revenue contribution per product
+// 3. Calculates margin headroom = current margin% - 20% (min acceptable margin)
+// 4. Uses quadrant-specific rules to determine:
+//    - How much to adjust the price (increase for stars/volume_traps, decrease for hidden_gems/dogs)
+//    - The maximum discount % the product can sustain without going below 20% margin
+// 5. Returns per-product recommendations + a summary of overall revenue impact
+//
+// ENDPOINT: GET /api/combo/analytics/pricing
+const getPricingRecommendations = async (req, res) => {
+    try {
+        // Step 1: Get BCG classification and metrics for all products
+        const productAnalytics = await computeProductAnalytics();
+        const orders = await Order.find().lean();
+        const totalOrders = orders.length;
+        const allProducts = await Product.find().lean();
+
+        // Build a lookup map: product_id → product document
+        const productMap = {};
+        for (const p of allProducts) {
+            productMap[p._id.toString()] = p;
+        }
+
+        // Calculate total revenue across all products (used for revenue contribution %)
+        const totalRevenue = productAnalytics.reduce((s, p) => {
+            const stats = orders.reduce((acc, order) => {
+                for (const item of order.items) {
+                    if (item.product_id.toString() === p.product_id.toString()) {
+                        acc += (item.base_price || 0) * item.quantity;
+                    }
+                }
+                return acc;
+            }, 0);
+            return s + stats;
+        }, 0);
+
+        // ─── MARGIN-VS-DEMAND TRADEOFF THRESHOLDS ────────────────────────
+        // MIN_ACCEPTABLE_MARGIN: the hard floor — we never price below this.
+        // REMOVAL_MARGIN_THRESHOLD: if margin is ALSO below this, suggest removal.
+        // These are expressed as percentages of selling price.
+        const MIN_ACCEPTABLE_MARGIN = 30;    // 30% — hard price floor
+        const REMOVAL_MARGIN_THRESHOLD = 30; // if margin < 30% AND demand is low → suggest removal
+
+        // ─── COMPUTE RECOMMENDATIONS FOR EACH PRODUCT ─────────────────
+        const recommendations = productAnalytics.map(pa => {
+            const product = productMap[pa.product_id.toString()];
+            if (!product) return null;
+
+            // ── Normalized inputs (all 0–1) ──────────────────────────────
+            // demandNorm:   how frequently this product appears in orders
+            // headroomNorm: how much margin buffer exists above the 30% floor
+            const demandScore = Math.min(100, parseFloat((pa.order_frequency * 100 * 2).toFixed(1)));
+            const demandNorm = demandScore / 100;
+            const marginHeadroom = Math.max(0, pa.margin_pct - MIN_ACCEPTABLE_MARGIN);
+            const headroomNorm = Math.min(1, marginHeadroom / 50); // 50% headroom = fully saturated
+            const revenueContribution = pa.revenue_share;
+
+            // ── REMOVAL FLAG (Dog quadrant: low margin + low demand) ─────
+            const isDog = pa.classification === "dog";
+            const shouldRemove = isDog && pa.margin_pct < REMOVAL_MARGIN_THRESHOLD;
+            const removeReason = shouldRemove
+                ? `Margin is ${pa.margin_pct.toFixed(1)}% (below ${REMOVAL_MARGIN_THRESHOLD}% threshold) and demand is very low (score: ${demandScore}). Keeping this item hurts overall profitability.`
+                : null;
+
+            // ── PRICE ADJUSTMENT ─────────────────────────────────────────
+            let priceAdjustPct;
+            let strategy;
+            let maxDiscountCap;
+
+            if (pa.classification === "star") {
+                priceAdjustPct = 2 + demandNorm * 10 + headroomNorm * 2;
+                priceAdjustPct = Math.min(priceAdjustPct, 14);
+                maxDiscountCap = 8;
+                strategy = "Premium pricing — strong demand supports a price increase. Keep discounts minimal.";
+
+            } else if (pa.classification === "hidden_gem") {
+                const discountStrength = headroomNorm * (1 - demandNorm);
+                priceAdjustPct = -(discountStrength * 15);
+                priceAdjustPct = Math.max(priceAdjustPct, -15);
+                maxDiscountCap = Math.min(marginHeadroom, 25);
+                strategy = `Boost sales — this product has strong margins (${pa.margin_pct.toFixed(1)}%) but low demand (score: ${demandScore}). Offering a discount of up to ${maxDiscountCap.toFixed(1)}% will drive discovery without hurting profitability.`;
+
+            } else if (pa.classification === "volume_trap") {
+                const marginDeficit = Math.max(0, (50 - pa.margin_pct) / 50);
+                priceAdjustPct = 5 + marginDeficit * 10;
+                priceAdjustPct = Math.min(priceAdjustPct, 15);
+                maxDiscountCap = 3;
+                strategy = `Margin recovery — customers love this product (demand: ${demandScore}) but margins are thin at ${pa.margin_pct.toFixed(1)}%. A price increase is needed to stay profitable.`;
+
+            } else {
+                if (shouldRemove) {
+                    priceAdjustPct = 0;
+                    maxDiscountCap = 0;
+                    strategy = `Consider removing — margin (${pa.margin_pct.toFixed(1)}%) is below your ${REMOVAL_MARGIN_THRESHOLD}% threshold and demand is very low. This item is reducing your overall profitability.`;
+                } else {
+                    const cutStrength = (1 - demandNorm);
+                    priceAdjustPct = -(cutStrength * 8);
+                    priceAdjustPct = Math.max(priceAdjustPct, -8);
+                    maxDiscountCap = Math.min(marginHeadroom, 15);
+                    strategy = `Test demand — low sales but margins are still above threshold. A moderate price reduction may revive interest. If sales don't improve, consider removing from the menu.`;
+                }
+            }
+
+            priceAdjustPct = parseFloat(priceAdjustPct.toFixed(1));
+
+            // ── Apply adjustment + safety floor ─────────────────────────
+            const suggestedPrice = Math.round(product.selling_price * (1 + priceAdjustPct / 100));
+            const minPrice = Math.round(product.cost / (1 - MIN_ACCEPTABLE_MARGIN / 100));
+            const finalSuggestedPrice = Math.max(suggestedPrice, minPrice);
+            const maxDiscountPct = Math.min(marginHeadroom, maxDiscountCap);
+
+            return {
+                product_id: pa.product_id,
+                name: pa.name,
+                category: pa.category,
+                current_price: product.selling_price,
+                cost: product.cost,
+                suggested_price: finalSuggestedPrice,
+                price_change_pct: priceAdjustPct,
+                price_change_amt: finalSuggestedPrice - product.selling_price,
+                min_price: minPrice,
+                max_discount_pct: parseFloat(maxDiscountPct.toFixed(1)),
+                max_discount_amt: Math.round(product.selling_price * maxDiscountPct / 100),
+                margin_pct: pa.margin_pct,
+                margin_headroom: parseFloat(marginHeadroom.toFixed(1)),
+                demand_score: demandScore,
+                revenue_contribution: revenueContribution,
+                units_sold: pa.units_sold,
+                order_frequency: pa.order_frequency,
+                classification: pa.classification,
+                strategy,
+                should_remove: shouldRemove,
+                remove_reason: removeReason,
+            };
+        }).filter(Boolean);
+
+        // ─── SUMMARY STATISTICS ─────────────────────────────────────
+        // These are shown in the dashboard's top-level summary cards
+        const avgMargin = (recommendations.reduce((s, r) => s + r.margin_pct, 0) / recommendations.length).toFixed(1);
+        // Estimate total revenue impact if ALL suggestions were applied:
+        // sum of (price change per unit × units sold historically)
+        const totalPotentialRevChange = recommendations.reduce((s, r) => s + r.price_change_amt * r.units_sold, 0);
+
+        return res.status(200).json({
+            success: true,
+            total_products: recommendations.length,
+            total_orders_analyzed: totalOrders,
+            min_acceptable_margin: MIN_ACCEPTABLE_MARGIN,
+            summary: {
+                avg_margin: parseFloat(avgMargin),
+                potential_revenue_change: totalPotentialRevChange,
+                products_to_increase: recommendations.filter(r => r.price_change_amt > 0).length,
+                products_to_decrease: recommendations.filter(r => r.price_change_amt < 0).length,
+                products_no_change: recommendations.filter(r => r.price_change_amt === 0).length,
+                products_to_remove: recommendations.filter(r => r.should_remove).length,
+            },
+            data: recommendations,
+        });
+    } catch (error) {
+        console.error("getPricingRecommendations error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ─── STEP 8: Apply Pricing Recommendation ────────────────────────────────────
+// PURPOSE: Called when the owner clicks "Apply Suggestion" or "Save Custom"
+// on the Pricing Dashboard. Persists the chosen price and discount threshold
+// to the product document in MongoDB.
+//
+// ENDPOINT: PUT /api/product/:id/pricing
+//
+// BODY PARAMS:
+//   - selling_price:    (optional) new selling price — updates the actual menu price
+//   - suggested_price:  (optional) store the analytics-recommended price for reference
+//   - max_discount_pct: (optional) the max discount % — used by combo generator
+//   - min_price:        (optional) the floor price below which we shouldn't go
+//
+// VALIDATION: selling_price must be >= cost (prevents negative margin)
+const applyPricing = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { selling_price, suggested_price, max_discount_pct, min_price } = req.body;
+
+        const product = await Product.findById(id);
+        if (!product) {
+            return res.status(404).json({ success: false, message: "Product not found" });
+        }
+
+        // Build update object — only include fields that were provided
+        const updates = {};
+        if (selling_price !== undefined) {
+            // Guard: never allow price below cost (would mean selling at a loss)
+            if (selling_price < product.cost) {
+                return res.status(400).json({ success: false, message: "Selling price cannot be less than cost" });
+            }
+            updates.selling_price = Number(selling_price);
+        }
+        if (suggested_price !== undefined) updates.suggested_price = Number(suggested_price);
+        // max_discount_pct is stored on the product so that generateSmartCombos()
+        // can read it when computing combo discounts (instead of using hardcoded 10%/12%)
+        if (max_discount_pct !== undefined) updates.max_discount_pct = Number(max_discount_pct);
+        if (min_price !== undefined) updates.min_price = Number(min_price);
+
+        const updated = await Product.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true });
+
+        return res.status(200).json({
+            success: true,
+            message: "Pricing updated successfully",
+            data: updated,
+        });
+    } catch (error) {
+        return res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { generateSmartCombos, getProductAnalytics, getAssociationRules, getSuggestions, getComboAnalytics, getPricingRecommendations, applyPricing };

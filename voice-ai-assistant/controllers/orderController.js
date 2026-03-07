@@ -270,6 +270,7 @@ exports.parseOrder = async (req, res) => {
                 message: `🎉 Order confirmed! You ordered: ${orderSummary(finalOrder)}. Total: ₹${finalPrice}.`,
                 order: finalOrder,
                 order_id: savedOrder.order_id,
+                total: finalPrice,
                 completed: true
             });
         }

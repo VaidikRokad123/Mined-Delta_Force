@@ -9,6 +9,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const twilioRoutes = require("./routes/twilioRoutes");
 const authRoutes = require("./routes/authRoutes");
 const menuRoutes = require("./routes/menuRoutes");
+const billRoutes = require("./routes/billRoutes");
 const generateSpeech = require("./services/sarvamService");
 
 const app = express();
@@ -46,6 +47,7 @@ app.use("/api/auth", authRoutes);  // Auth: register, login, logout
 app.use("/api", menuRoutes);  // Menu: product/all, combo/all
 app.use("/", orderRoutes);
 app.use("/", twilioRoutes);
+app.use("/api", billRoutes);
 
 // ========================
 // SARVAM TTS ROUTE

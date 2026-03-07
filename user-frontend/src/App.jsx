@@ -79,7 +79,7 @@ function AppInner() {
       <header className="topbar">
         <div className="topbar-brand">
           <div className="brand-mark">P</div>
-          <h1>PetPooja<span>Order &amp; Dine</span></h1>
+          <h1>PetPooja<span>Order & Dine</span></h1>
         </div>
 
         <nav className="nav-items">

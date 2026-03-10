@@ -84,7 +84,7 @@ The platform does not just display data — it **mines order history**, **genera
 │   ┌──────────────────────────────┐         ┌──────────────────────────────┐    │
 │   │   Owner Dashboard            │         │   User Dashboard             │    │
 │   │   (React 19 + Vite 7)        │         │   (React 19 + Vite 7)        │    │
-│   │   http://localhost:5173      │         │   http://localhost:5174       │    │
+│   │   http://localhost:5173      │         │   http://localhost:5174      │    │
 │   ├──────────────────────────────┤         ├──────────────────────────────┤    │
 │   │ • Product Analytics (BCG)    │         │ • Menu Browser               │    │
 │   │ • Pricing Dashboard          │         │ • AI Text Chat Ordering      │    │
@@ -92,7 +92,7 @@ The platform does not just display data — it **mines order history**, **genera
 │   │ • Manage Combos              │         │ • Phone Ordering (Twilio)    │    │
 │   │ • Upsell Suggestion View     │         │ • My Orders (Session)        │    │
 │   │ • Order Management Table     │         │                              │    │
-│   └──────────┬───────────────────┘         └─────────┬──────┬────────────┘    │
+│   └──────────┬───────────────────┘         └─────────┬──────┬─────────────┘    │
 │              │ REST API                              │      │                  │
 └──────────────┼───────────────────────────────────────┼──────┼──────────────────┘
                │                                       │      │ /parse-order
@@ -113,8 +113,8 @@ The platform does not just display data — it **mines order history**, **genera
                │                            │                  │
                └────────────┬───────────────┘                  │
                             │                                  │
-               ┌────────────▼────────────┐        ┌───────────▼──────────────────┐
-               │   MongoDB Atlas          │        │   External AI & Cloud Services│
+               ┌────────────▼────────────┐        ┌───────────▼───────────────────┐
+               │   MongoDB Atlas         │        │   External AI & Cloud Services│
                │                         │        │                               │
                │   • products            │        │   • HuggingFace API           │
                │   • orders              │        │     (Meta-LLama 3 70B)        │

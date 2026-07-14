@@ -5,3 +5,5 @@ voice-ai-assistant/.env
 recordings/
 temp/
 public/audio/
+.agents
+.claude

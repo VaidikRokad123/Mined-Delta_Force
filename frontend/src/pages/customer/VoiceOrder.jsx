@@ -30,6 +30,7 @@ export default function VoiceOrder({ sessionId }) {
 
   const speak = useCallback(async (text) => {
     setStatus('speaking')
+    let ttsSuccess = false
     try {
       const res = await fetch(`${VOICE_API}/tts`, {
         method: 'POST',
@@ -38,6 +39,7 @@ export default function VoiceOrder({ sessionId }) {
       })
       const data = await res.json()
       if (data.audio) {
+        ttsSuccess = true
         const audio = new Audio(`data:audio/wav;base64,${data.audio}`)
         audioRef.current = audio
         audio.play()
@@ -47,23 +49,32 @@ export default function VoiceOrder({ sessionId }) {
             startListening()
           }
         }
-        return
       }
-    } catch {
-      // TTS failed — fall back to browser speech synthesis
+    } catch (err) {
+      console.error("Sarvam TTS request failed, falling back to browser:", err)
     }
 
-    // Fallback: browser TTS
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'en-IN'
-    utterance.onend = () => {
-      setStatus('idle')
-      if (!orderCompleted) {
-        startListening()
+    if (!ttsSuccess) {
+      // Fallback: browser TTS
+      window.speechSynthesis.cancel() // Reset any hung state
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'en-IN'
+      utterance.onend = () => {
+        setStatus('idle')
+        if (!orderCompleted) {
+          startListening()
+        }
       }
+      utterance.onerror = () => {
+        setStatus('idle')
+        if (!orderCompleted) {
+          startListening()
+        }
+      }
+      window.speechSynthesis.speak(utterance)
     }
-    window.speechSynthesis.speak(utterance)
   }, [orderCompleted])
+
 
   const processResponse = useCallback(async (text) => {
     setStatus('processing')

@@ -8,10 +8,12 @@ const signToken = (userId) =>
         expiresIn: process.env.JWT_EXPIRES_IN || "7d",
     });
 
+const isProduction = process.env.NODE_ENV === "production";
+
 const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
@@ -140,7 +142,11 @@ const login = async (req, res) => {
 // ─── Logout ────────────────────────────────────────────────────────────────
 
 const logout = (req, res) => {
-    res.clearCookie("auth_token", { httpOnly: true, sameSite: "lax" });
+    res.clearCookie("auth_token", {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? "none" : "lax",
+    });
     res.json({ success: true, message: "Logged out successfully." });
 };
 

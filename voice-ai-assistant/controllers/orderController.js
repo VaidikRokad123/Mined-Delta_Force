@@ -24,7 +24,7 @@ const INCREASE_WORDS = [
     "one more"
 ];
 const SET_QTY_WORDS = ["make", "set"];
-const REPLACE_WORDS = ["replace", "change", "swap"];
+const REPLACE_WORDS = ["replace", "change", "swap", "modify", "modified"];
 const SKIP_ADDON_WORDS = ["no", "nope", "nah", "skip", "none", "nothing", "no thanks", "that's it", "thats it"];
 
 const FILLER_WORDS = [

@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react'
 import BillView from './BillView'
 
-const VOICE_API = 'http://localhost:3001'
+const VOICE_API = import.meta.env.VITE_API_URL || 'http://localhost:3001'
 
 export default function VoiceOrder({ sessionId }) {
   const [status, setStatus] = useState('idle') // idle | listening | processing | speaking

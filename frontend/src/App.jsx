@@ -22,7 +22,7 @@ import Login from './pages/customer/Login'
 import Register from './pages/customer/Register'
 import VerifyEmail from './pages/customer/VerifyEmail'
 
-const API_BASE = 'http://localhost:3001/api'
+const API_BASE = `${import.meta.env.VITE_API_URL || 'http://localhost:3001'}/api`
 
 // Generate or fetch user ordering session
 function getSessionId() {

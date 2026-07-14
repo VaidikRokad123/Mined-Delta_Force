@@ -146,7 +146,7 @@ export default function Menu({ apiBase }) {
                 onClick={() => imgUrl && setPopupImg({ src: imgUrl, name: p.name })}
               >
                 {imgUrl ? (
-                  <img src={imgUrl} alt={p.name} className="swiggy-card-img" loading="lazy" />
+                  <img src={imgUrl} alt={p.name} className="swiggy-card-img" />
                 ) : (
                   <div className="swiggy-card-img-placeholder">
                     <span>{categoryIcons[p.category] || '🍽️'}</span>

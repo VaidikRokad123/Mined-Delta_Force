@@ -1,8 +1,8 @@
 const { OpenAI } = require("openai");
 
 const client = new OpenAI({
-    baseURL: "https://router.huggingface.co/v1",
-    apiKey: process.env.HF_API_KEY
+    baseURL: "https://api.groq.com/openai/v1",
+    apiKey: process.env.GROQ_API
 });
 
 async function menuAssistantAI(text, products, combos) {
@@ -38,7 +38,7 @@ Rules:
 `;
 
         const response = await client.chat.completions.create({
-            model: "meta-llama/Meta-Llama-3-70B-Instruct",
+            model: "llama-3.3-70b-versatile",
             messages: [
                 {
                     role: "system",

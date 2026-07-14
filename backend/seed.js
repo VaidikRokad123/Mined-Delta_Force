@@ -1,8 +1,12 @@
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4']);
+dns.setDefaultResultOrder('ipv4first');
 require("dotenv").config();
 const mongoose = require("mongoose");
 const Product = require("./src/models/product.model.js");
 const Order = require("./src/models/order.model.js");
 const Combo = require("./src/models/combo.model.js");
+const User = require("./src/models/user.model.js");
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 
@@ -580,7 +584,33 @@ async function seed() {
         await Product.deleteMany({});
         await Order.deleteMany({});
         await Combo.deleteMany({});
-        console.log("Cleared existing data");
+        await User.deleteMany({});
+        console.log("Cleared existing data and users");
+
+        // Seed Default Admin
+        await User.create({
+            name: "Admin User",
+            email: "admin@petpooja.com",
+            password: "123456",
+            role: "admin",
+        });
+        console.log("Seeded default admin: admin@petpooja.com / 123456");
+
+        // Seed Default Customer
+        await User.create({
+            name: "Customer User",
+            email: "user@petpooja.com",
+            password: "123456",
+            role: "user",
+            address: {
+                street: "123 Main St",
+                landmark: "Near Market",
+                city: "Ahmedabad",
+                state: "Gujarat",
+                pincode: "380001",
+            }
+        });
+        console.log("Seeded default user: user@petpooja.com / 123456");
 
         // Insert products
         const products = await Product.insertMany(productsData);

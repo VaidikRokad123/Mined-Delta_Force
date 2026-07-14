@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useAuth } from '../../context/CustomerAuthContext'
+import { useAuth } from '../../context/AuthContext'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const PIN_RE = /^\d{6}$/
